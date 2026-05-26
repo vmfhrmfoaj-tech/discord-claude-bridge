@@ -56,19 +56,18 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
   async function processJob(job: Job): Promise<void> {
     inFlightCount++;
     const startMs = Date.now();
+    const { request } = job;
+    const meta = {
+      requestId: job.requestId,
+      channelId: request.channelId,
+      guildId: request.guildId,
+      threadId: request.threadId
+    };
+    const target = {
+      messageId: request.messageId,
+      ...meta
+    };
     try {
-      const { request } = job;
-      const meta = {
-        requestId: job.requestId,
-        channelId: request.channelId,
-        guildId: request.guildId,
-        threadId: request.threadId
-      };
-      const target = {
-        messageId: request.messageId,
-        ...meta
-      };
-
       let sessionId: string | undefined;
       try {
         sessionId = await sessionStore.getSessionId(request.sessionScopeKey);
@@ -113,6 +112,14 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
           durationMs: Date.now() - startMs
         });
       }
+    } catch {
+      logger?.error({
+        event: "job.error",
+        ...meta,
+        jobStatus: "failure",
+        durationMs: Date.now() - startMs
+      });
+      await publisher.publishFailure(target, "internal-error").catch(() => {});
     } finally {
       inFlightCount--;
       scheduleNext();
