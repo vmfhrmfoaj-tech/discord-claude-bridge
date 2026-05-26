@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
 
-import { createScaffoldRuntime } from "./scaffold-runtime.js";
+import { createLocalRuntime } from "./local-runtime.js";
 
 export async function main(): Promise<void> {
-  const runtime = createScaffoldRuntime({
+  const runtime = createLocalRuntime({
     log(event) {
       console.log(JSON.stringify(event));
     }

@@ -12,6 +12,12 @@ import type {
 export interface QueueConfig {
   concurrency: number;
   maxPendingJobs: number;
+  claude?: {
+    timeoutMs?: number;
+    model?: string;
+    systemPrompt?: string;
+    maxBudgetUsd?: number;
+  };
 }
 
 export interface JobQueueDeps {
@@ -70,8 +76,11 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
 
       const result = await adapter.execute({
         prompt: request.prompt,
-        timeoutMs: 30_000,
-        sessionId
+        timeoutMs: config.claude?.timeoutMs ?? 30_000,
+        sessionId,
+        model: config.claude?.model,
+        systemPrompt: config.claude?.systemPrompt,
+        maxBudgetUsd: config.claude?.maxBudgetUsd
       });
 
       if (result.kind === "success") {
