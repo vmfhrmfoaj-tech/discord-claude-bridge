@@ -18,6 +18,13 @@ export {
   createMentionParser,
   type MentionParserConfig
 } from "./mention-parser.js";
+export {
+  createReplyPublisher,
+  type DiscordMessageTarget,
+  type DiscordSendError,
+  type ReplyPublisherConfig,
+  type ReplyPublisherDeps
+} from "./reply-publisher.js";
 export type { Runtime, RuntimeDependencies } from "./runtime.js";
 export {
   moduleSeams,
