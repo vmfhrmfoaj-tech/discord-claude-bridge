@@ -68,7 +68,9 @@ class FakeSessionStore implements SessionStore {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeMentionRequest(overrides: Partial<MentionRequest> = {}): MentionRequest {
+function makeMentionRequest(
+  overrides: Partial<MentionRequest> = {}
+): MentionRequest {
   return {
     messageId: "msg-001",
     authorId: "user-111",
@@ -125,8 +127,12 @@ describe("JobQueue", () => {
       const { queue } = makeQueue();
       await queue.start();
 
-      const r1 = await queue.enqueue(makeMentionRequest({ messageId: "msg-001" }));
-      const r2 = await queue.enqueue(makeMentionRequest({ messageId: "msg-002" }));
+      const r1 = await queue.enqueue(
+        makeMentionRequest({ messageId: "msg-001" })
+      );
+      const r2 = await queue.enqueue(
+        makeMentionRequest({ messageId: "msg-002" })
+      );
 
       expect(r1.kind).toBe("accepted");
       expect(r2.kind).toBe("accepted");
@@ -178,7 +184,9 @@ describe("JobQueue", () => {
       // Second job — goes into pending slot (in-flight=1, pending=0 -> 1)
       await queue.enqueue(makeMentionRequest({ messageId: "msg-002" }));
       // Third job — pending is now full (maxPendingJobs=1)
-      const result = await queue.enqueue(makeMentionRequest({ messageId: "msg-003" }));
+      const result = await queue.enqueue(
+        makeMentionRequest({ messageId: "msg-003" })
+      );
 
       expect(result).toEqual({ kind: "rejected", reason: "queue-full" });
 
@@ -252,7 +260,9 @@ describe("JobQueue", () => {
       const { queue } = makeQueue({ adapter, publisher });
       await queue.start();
 
-      await queue.enqueue(makeMentionRequest({ messageId: "msg-x", channelId: "chan-y" }));
+      await queue.enqueue(
+        makeMentionRequest({ messageId: "msg-x", channelId: "chan-y" })
+      );
       await queue.stop();
 
       expect(publisher.successCalls).toHaveLength(1);
@@ -280,6 +290,51 @@ describe("JobQueue", () => {
       expect(sessionStore.store.get("chan-222")).toBe("sess-xyz");
     });
 
+    it("completes session save before publishing success", async () => {
+      const events: string[] = [];
+      let resolveSave!: () => void;
+      const adapter = new FakeClaudeCliAdapter();
+      adapter.result = {
+        kind: "success",
+        text: "saved before reply",
+        sessionId: "sess-new",
+        exitCode: 0
+      };
+      const sessionStore: SessionStore = {
+        getSessionId: () => Promise.resolve(undefined),
+        async setSessionId() {
+          events.push("save:start");
+          await new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          });
+          events.push("save:done");
+        }
+      };
+      const publisher: ReplyPublisher = {
+        publishTyping: () => Promise.resolve(),
+        publishSuccess: () => {
+          events.push("publish:success");
+          return Promise.resolve();
+        },
+        publishFailure: () => Promise.resolve()
+      };
+
+      const { queue } = makeQueue({ adapter, publisher, sessionStore });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+
+      expect(events).toEqual(["save:start"]);
+
+      resolveSave();
+      await queue.stop();
+
+      expect(events).toEqual(["save:start", "save:done", "publish:success"]);
+    });
+
     it("loads existing sessionId from SessionStore and passes to adapter", async () => {
       const sessionStore = new FakeSessionStore();
       await sessionStore.setSessionId("chan-222", "existing-sess");
@@ -294,6 +349,73 @@ describe("JobQueue", () => {
 
       expect(adapter.calls[0]?.sessionId).toBe("existing-sess");
     });
+
+    it("waits for session lookup before invoking adapter", async () => {
+      let resolveLookup!: (sessionId: string) => void;
+      const adapter = new FakeClaudeCliAdapter();
+      const sessionStore: SessionStore = {
+        getSessionId: () =>
+          new Promise<string>((resolve) => {
+            resolveLookup = resolve;
+          }),
+        setSessionId: () => Promise.resolve()
+      };
+
+      const { queue } = makeQueue({ adapter, sessionStore });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+
+      expect(adapter.calls).toHaveLength(0);
+
+      resolveLookup("sess-after-lookup");
+      await queue.stop();
+
+      expect(adapter.calls).toHaveLength(1);
+      expect(adapter.calls[0]?.sessionId).toBe("sess-after-lookup");
+    });
+
+    it("passes undefined sessionId to adapter when no session mapping exists", async () => {
+      const adapter = new FakeClaudeCliAdapter();
+      const sessionStore: SessionStore = {
+        getSessionId: () => Promise.resolve(undefined),
+        setSessionId: () => Promise.resolve()
+      };
+
+      const { queue } = makeQueue({ adapter, sessionStore });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await queue.stop();
+
+      expect(adapter.calls).toHaveLength(1);
+      expect(adapter.calls[0]?.sessionId).toBeUndefined();
+    });
+
+    it("treats ENOENT from SessionStore lookup as no resumable session", async () => {
+      const adapter = new FakeClaudeCliAdapter();
+      const publisher = new FakeReplyPublisher();
+      const sessionStore: SessionStore = {
+        getSessionId: () =>
+          Promise.reject(
+            Object.assign(new Error("missing"), { code: "ENOENT" })
+          ),
+        setSessionId: () => Promise.resolve()
+      };
+
+      const { queue } = makeQueue({ adapter, publisher, sessionStore });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await queue.stop();
+
+      expect(adapter.calls).toHaveLength(1);
+      expect(adapter.calls[0]?.sessionId).toBeUndefined();
+      expect(publisher.successCalls).toHaveLength(1);
+    });
   });
 
   describe("worker: job failure", () => {
@@ -305,7 +427,9 @@ describe("JobQueue", () => {
       const { queue } = makeQueue({ adapter, publisher });
       await queue.start();
 
-      await queue.enqueue(makeMentionRequest({ messageId: "msg-fail", channelId: "chan-fail" }));
+      await queue.enqueue(
+        makeMentionRequest({ messageId: "msg-fail", channelId: "chan-fail" })
+      );
       await queue.stop();
 
       expect(publisher.failureCalls).toHaveLength(1);
@@ -325,6 +449,43 @@ describe("JobQueue", () => {
       await queue.stop();
 
       expect(publisher.successCalls).toHaveLength(0);
+    });
+
+    it("does not save a session and preserves trace target when adapter returns failure", async () => {
+      const publisher = new FakeReplyPublisher();
+      const adapter = new FakeClaudeCliAdapter();
+      adapter.result = { kind: "failure", category: "auth-failure" };
+      let saveCalls = 0;
+      const sessionStore: SessionStore = {
+        getSessionId: () => Promise.resolve("existing-session"),
+        setSessionId: () => {
+          saveCalls++;
+          return Promise.resolve();
+        }
+      };
+
+      const { queue } = makeQueue({ adapter, publisher, sessionStore });
+      await queue.start();
+
+      const enqueueResult = await queue.enqueue(
+        makeMentionRequest({
+          guildId: "guild-fail",
+          threadId: "thread-fail"
+        })
+      );
+      await queue.stop();
+
+      expect(enqueueResult.kind).toBe("accepted");
+      if (enqueueResult.kind !== "accepted") return;
+      expect(saveCalls).toBe(0);
+      expect(publisher.failureCalls).toHaveLength(1);
+      expect(publisher.failureCalls[0]?.target).toEqual({
+        messageId: "msg-001",
+        channelId: "chan-222",
+        requestId: enqueueResult.requestId,
+        guildId: "guild-fail",
+        threadId: "thread-fail"
+      });
     });
   });
 
@@ -348,8 +509,12 @@ describe("JobQueue", () => {
       const { queue } = makeQueue({ concurrency: 1, adapter });
       await queue.start();
 
-      const p1 = queue.enqueue(makeMentionRequest({ messageId: "m1", prompt: "job-1" }));
-      const p2 = queue.enqueue(makeMentionRequest({ messageId: "m2", prompt: "job-2" }));
+      const p1 = queue.enqueue(
+        makeMentionRequest({ messageId: "m1", prompt: "job-1" })
+      );
+      const p2 = queue.enqueue(
+        makeMentionRequest({ messageId: "m2", prompt: "job-2" })
+      );
 
       await p1;
       await p2;
@@ -366,18 +531,33 @@ describe("JobQueue", () => {
   });
 
   describe("requestId propagation", () => {
-    it("requestId from enqueue is a non-empty string correlating to the job", async () => {
-      const adapter = new FakeClaudeCliAdapter();
-      const { queue } = makeQueue({ adapter });
+    it("passes requestId, guildId, and threadId to the success publisher target", async () => {
+      const publisher = new FakeReplyPublisher();
+      const { queue } = makeQueue({ publisher });
       await queue.start();
 
-      const result = await queue.enqueue(makeMentionRequest({ prompt: "trace me" }));
+      const result = await queue.enqueue(
+        makeMentionRequest({
+          guildId: "guild-123",
+          threadId: "thread-456",
+          prompt: "trace me"
+        })
+      );
 
       expect(result.kind).toBe("accepted");
       if (result.kind !== "accepted") return;
       expect(result.requestId).toMatch(/^[0-9a-f-]{8,}$/i);
 
       await queue.stop();
+
+      expect(publisher.successCalls).toHaveLength(1);
+      expect(publisher.successCalls[0]?.target).toEqual({
+        messageId: "msg-001",
+        channelId: "chan-222",
+        requestId: result.requestId,
+        guildId: "guild-123",
+        threadId: "thread-456"
+      });
     });
   });
 });

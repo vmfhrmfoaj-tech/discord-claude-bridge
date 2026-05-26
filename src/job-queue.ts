@@ -49,9 +49,24 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
     inFlightCount++;
     try {
       const { request } = job;
-      const target = { messageId: request.messageId, channelId: request.channelId };
+      const target = {
+        messageId: request.messageId,
+        channelId: request.channelId,
+        requestId: job.requestId,
+        guildId: request.guildId,
+        threadId: request.threadId
+      };
 
-      const sessionId = await sessionStore.getSessionId(request.sessionScopeKey);
+      let sessionId: string | undefined;
+      try {
+        sessionId = await sessionStore.getSessionId(request.sessionScopeKey);
+      } catch (err) {
+        if (isEnoent(err)) {
+          sessionId = undefined;
+        } else {
+          throw err;
+        }
+      }
 
       const result = await adapter.execute({
         prompt: request.prompt,
@@ -61,7 +76,10 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
 
       if (result.kind === "success") {
         if (result.sessionId) {
-          await sessionStore.setSessionId(request.sessionScopeKey, result.sessionId);
+          await sessionStore.setSessionId(
+            request.sessionScopeKey,
+            result.sessionId
+          );
         }
         await publisher.publishSuccess(target, result.text);
       } else {
@@ -124,4 +142,13 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
   }
 
   return { enqueue, start, stop };
+}
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as Record<string, unknown>)["code"] === "ENOENT"
+  );
 }
