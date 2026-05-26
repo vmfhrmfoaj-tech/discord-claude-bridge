@@ -388,3 +388,43 @@ ADR 제약:
 - issue-sized branch를 전제로 작업해. 예: `issue-<ISSUE_NUMBER>-<short-name>`.
 - 마지막에 변경 요약, 실행한 검증 명령, 남은 리스크를 알려줘.
 ```
+
+
+
+
+
+
+
+
+
+
+
+``` 작업종료(commit) 및 push/PR 프롬프트
+Issue #2 branch `issue-2-scaffold-runtime`의 uncommitted scaffold 작업을 review하고, 검증 통과 후 commit/push/PR 생성해줘. 
+```
+
+
+``` PR머지하고 종료 프롬프트
+PR #14를 scope/CI/checks 기준으로 검토하고, 문제가 없으면 squash merge해줘. merge 후 local main으로 전환해서 pull까지 해줘. 단, 예상 밖 파일 변경이나 failed check가 있으면 merge하지 말고 보고해줘.
+
+```
+
+
+```
+추천 순서는 이겁니다.
+
+먼저 issue #2 마무리
+지금 branch issue-2-scaffold-runtime에 구현은 되어 있지만 아직 uncommitted 상태입니다. 먼저 git status, 최종 검증, commit, 필요하면 push/PR까지 해서 #2를 닫는 게 맞습니다. issue #3가 “Blocked by #2”라서, #2가 완료된 상태를 만들어야 흐름이 깔끔합니다.
+
+그 다음 issue #3 진행
+#3는 Config Loader라서 지금 scaffold 다음에 아주 자연스러운 vertical slice입니다. Tdd로 가는 게 맞고, 테스트 surface는 ConfigLoader.load() public Interface가 좋습니다. .env/YAML/filesystem은 fake 또는 temp file seam으로 두고, real Discord/Claude는 건드리지 않으면 됩니다.
+
+handoff 스킬은 “세션 넘길 때”만
+지금 바로 내가 이어서 #3를 할 거면 handoff는 굳이 필요 없습니다. 다만 다른 agent나 새 세션에서 이어갈 거면 /tmp에 handoff 문서를 남기는 게 좋습니다. 특히 #2 변경 요약, 검증 명령, #3 시작점이 담기면 다음 agent가 덜 헤맵니다.
+
+improve-codebase-architecture는 아직 이릅니다
+지금 코드는 의도적으로 scaffold라서 대부분 Interface placeholder입니다. 이 시점에 architecture review를 돌리면 “shallow Module”이 많이 보일 텐데, 그건 버그가 아니라 issue #2의 목적입니다. 최소한 Config Loader, Mention Parser, Session Store 중 하나 이상 실제 Implementation이 생긴 뒤에 쓰는 게 더 생산적입니다.
+
+제 선택은: #2 commit/PR → issue #3를 Tdd로 진행입니다.
+handoff는 세션을 끊을 때만 만들고, architecture review는 #3 이후나 #4/#5 정도에서 한 번 돌리는 게 좋아 보여요.
+```
