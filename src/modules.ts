@@ -120,7 +120,11 @@ export interface RuntimeConfig {
     systemPrompt?: string;
     maxBudgetUsd?: number;
   };
+  prompt: {
+    maxCharacters: number;
+  };
   session: {
+    scope: "thread-or-channel";
     storePath: string;
   };
   reply: {
