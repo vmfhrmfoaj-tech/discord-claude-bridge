@@ -331,6 +331,8 @@ Architecture review 결과 처리:
 
 ## Stage 11: Validate Runtime With Smoke Issues
 
+> 이 3-tier 구조의 설계 근거는 [ADR-0004](adr/0004-smoke-test-strategy.md)를 참조한다.
+
 PRD implementation issues가 모두 끝난 뒤에는 새 PRD를 만들기보다 validation issue 묶음으로 실제 동작을 확인한다. 이 단계는 제품 방향을 다시 정의하는 단계가 아니라, 구현된 runtime이 실제 환경에서 기대한 경로로 도는지 검증하는 단계다.
 
 v1 runtime validation은 다음 순서로 진행한다.
