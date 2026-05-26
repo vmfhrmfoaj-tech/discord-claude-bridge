@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { JsonSessionStore } from "../src/session-store.js";
 import type { FileSystem } from "../src/session-store.js";
+import type { StructuredLogEvent, StructuredLogger } from "../src/modules.js";
+
+class FakeLogger implements StructuredLogger {
+  warns: StructuredLogEvent[] = [];
+  infos: StructuredLogEvent[] = [];
+  errors: StructuredLogEvent[] = [];
+  info(ev: StructuredLogEvent): void {
+    this.infos.push(ev);
+  }
+  warn(ev: StructuredLogEvent): void {
+    this.warns.push(ev);
+  }
+  error(ev: StructuredLogEvent): void {
+    this.errors.push(ev);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fake filesystem seam — no real I/O in tests
@@ -141,5 +157,27 @@ describe("JsonSessionStore", () => {
     const raw = fakeFs.getFile(STORE_PATH);
     const parsed = JSON.parse(raw as string) as Record<string, string>;
     expect(parsed["key"]).toBe("sess");
+  });
+
+  describe("logging", () => {
+    it("logs session.corrupt warn when store file has invalid JSON", async () => {
+      const logger = new FakeLogger();
+      const corruptStore = new JsonSessionStore(STORE_PATH, fakeFs, logger);
+      fakeFs.setFile(STORE_PATH, "not valid json {{{");
+
+      await corruptStore.getSessionId("any-key");
+
+      const ev = logger.warns.find((e) => e.event === "session.corrupt");
+      expect(ev).toBeDefined();
+    });
+
+    it("does not log session.corrupt when file is missing (ENOENT)", async () => {
+      const logger = new FakeLogger();
+      const freshStore = new JsonSessionStore(STORE_PATH, fakeFs, logger);
+
+      await freshStore.getSessionId("any-key");
+
+      expect(logger.warns).toHaveLength(0);
+    });
   });
 });

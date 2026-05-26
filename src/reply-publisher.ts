@@ -1,4 +1,4 @@
-import type { ReplyPublisher, ReplyTarget } from "./modules.js";
+import type { ReplyPublisher, ReplyTarget, StructuredLogger } from "./modules.js";
 
 export interface DiscordMessageTarget {
   sendTyping(channelId: string): Promise<void>;
@@ -24,6 +24,7 @@ export interface ReplyPublisherDeps {
   discord: DiscordMessageTarget;
   config?: ReplyPublisherConfig;
   onDiscordError?: (category: string, retryAfterMs?: number) => void;
+  logger?: StructuredLogger;
 }
 
 const DEFAULT_CONFIG: ReplyPublisherConfig = {
@@ -80,7 +81,7 @@ function defaultOnDiscordError(category: string): void {
 }
 
 export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
-  const { discord } = deps;
+  const { discord, logger } = deps;
   const config = deps.config ?? DEFAULT_CONFIG;
   const onDiscordError = deps.onDiscordError ?? defaultOnDiscordError;
 
@@ -93,6 +94,7 @@ export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
       await discord.replyToMessage(messageId, channelId, content);
     } catch (err) {
       const category = classifyDiscordError(err);
+      logger?.error({ event: "discord.error", errorCategory: category });
       onDiscordError(category);
     }
   }
@@ -107,6 +109,13 @@ export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
 
       if (rawChunks.length === 1) {
         await safeReply(target.messageId, target.channelId, rawChunks[0] ?? "");
+        logger?.info({
+          event: "reply.success",
+          requestId: target.requestId,
+          channelId: target.channelId,
+          guildId: target.guildId,
+          threadId: target.threadId
+        });
         return;
       }
 
@@ -126,11 +135,26 @@ export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
         const content = `${chunk}${marker}`;
         await safeReply(target.messageId, target.channelId, content);
       }
+      logger?.info({
+        event: "reply.success",
+        requestId: target.requestId,
+        channelId: target.channelId,
+        guildId: target.guildId,
+        threadId: target.threadId
+      });
     },
 
     async publishFailure(target: ReplyTarget, category: string): Promise<void> {
       const message = FAILURE_MESSAGES[category] ?? UNKNOWN_FAILURE_MESSAGE;
       await safeReply(target.messageId, target.channelId, message);
+      logger?.info({
+        event: "reply.failure",
+        requestId: target.requestId,
+        channelId: target.channelId,
+        guildId: target.guildId,
+        threadId: target.threadId,
+        errorCategory: category
+      });
     }
   };
 }

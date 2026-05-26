@@ -6,7 +6,26 @@ import type {
   ProcessRunResult,
   ProcessRunner
 } from "../src/claude-cli-adapter.js";
-import type { ClaudeCliRequest } from "../src/modules.js";
+import type {
+  ClaudeCliRequest,
+  StructuredLogEvent,
+  StructuredLogger
+} from "../src/modules.js";
+
+class FakeLogger implements StructuredLogger {
+  infos: StructuredLogEvent[] = [];
+  warns: StructuredLogEvent[] = [];
+  errors: StructuredLogEvent[] = [];
+  info(ev: StructuredLogEvent): void {
+    this.infos.push(ev);
+  }
+  warn(ev: StructuredLogEvent): void {
+    this.warns.push(ev);
+  }
+  error(ev: StructuredLogEvent): void {
+    this.errors.push(ev);
+  }
+}
 
 class FakeProcessRunner implements ProcessRunner {
   lastArgv: string[] = [];
@@ -358,6 +377,55 @@ describe("ClaudeCliAdapter", () => {
       await adapter.execute({ ...BASE_REQUEST, timeoutMs: 12345 });
 
       expect(runner.lastOptions?.timeoutMs).toBe(12345);
+    });
+  });
+
+  describe("logging", () => {
+    it("logs cli.execute.success with durationMs and exitCode on success", async () => {
+      const runner = new FakeProcessRunner(makeSuccess("hi"));
+      const logger = new FakeLogger();
+      const adapter = createClaudeCliAdapter({ runner, logger });
+
+      await adapter.execute(BASE_REQUEST);
+
+      const ev = logger.infos.find((e) => e.event === "cli.execute.success");
+      expect(ev).toBeDefined();
+      expect(typeof ev?.durationMs).toBe("number");
+      expect(ev?.exitCode).toBe(0);
+    });
+
+    it("logs cli.execute.failure with errorCategory and durationMs on failure", async () => {
+      const runner = new FakeProcessRunner({
+        stdout: "",
+        stderr: "timed out",
+        exitCode: -1,
+        timedOut: true
+      });
+      const logger = new FakeLogger();
+      const adapter = createClaudeCliAdapter({ runner, logger });
+
+      await adapter.execute(BASE_REQUEST);
+
+      const ev = logger.errors.find((e) => e.event === "cli.execute.failure");
+      expect(ev).toBeDefined();
+      expect(ev?.errorCategory).toBe("timeout");
+      expect(typeof ev?.durationMs).toBe("number");
+    });
+
+    it("does not log raw stderr content", async () => {
+      const runner = new FakeProcessRunner({
+        stdout: "",
+        stderr: "SECRET_STDERR_DATA auth failure",
+        exitCode: 1,
+        timedOut: false
+      });
+      const logger = new FakeLogger();
+      const adapter = createClaudeCliAdapter({ runner, logger });
+
+      await adapter.execute(BASE_REQUEST);
+
+      const allLogs = JSON.stringify([...logger.infos, ...logger.errors]);
+      expect(allLogs).not.toContain("SECRET_STDERR_DATA");
     });
   });
 });

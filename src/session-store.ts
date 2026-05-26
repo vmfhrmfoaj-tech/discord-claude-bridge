@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import type { SessionStore } from "./modules.js";
+import type { SessionStore, StructuredLogger } from "./modules.js";
 
 // ---------------------------------------------------------------------------
 // Filesystem seam — injectable for tests, real fs/promises in production
@@ -29,7 +29,8 @@ type SessionMap = Record<string, string>;
 export class JsonSessionStore implements SessionStore {
   constructor(
     private readonly storePath: string,
-    private readonly fs: FileSystem = realFileSystem
+    private readonly fs: FileSystem = realFileSystem,
+    private readonly logger?: StructuredLogger
   ) {}
 
   async getSessionId(scopeKey: string): Promise<string | undefined> {
@@ -62,13 +63,7 @@ export class JsonSessionStore implements SessionStore {
     try {
       return JSON.parse(raw) as SessionMap;
     } catch {
-      // Documented policy: invalid JSON → recover as empty store.
-      // Log a warning so operators are aware the store was corrupt.
-      console.warn(
-        `[session-store] WARNING: ${this.storePath} contains invalid JSON. ` +
-          "Recovering as empty store to prevent session misrouting. " +
-          "Previous session continuity is lost."
-      );
+      this.logger?.warn({ event: "session.corrupt" });
       return {};
     }
   }

@@ -20,6 +20,9 @@ describe("runtime scaffold", () => {
         info: (event) => {
           calls.push(`log:${event.event}`);
         },
+        warn: (event) => {
+          calls.push(`warn:${event.event}`);
+        },
         error: (event) => {
           calls.push(`error:${event.event}`);
         }

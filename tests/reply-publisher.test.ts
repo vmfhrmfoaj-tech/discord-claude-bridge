@@ -5,7 +5,26 @@ import {
   type DiscordMessageTarget,
   type DiscordSendError
 } from "../src/reply-publisher.js";
-import type { ReplyTarget } from "../src/modules.js";
+import type {
+  ReplyTarget,
+  StructuredLogEvent,
+  StructuredLogger
+} from "../src/modules.js";
+
+class FakeLogger implements StructuredLogger {
+  infos: StructuredLogEvent[] = [];
+  warns: StructuredLogEvent[] = [];
+  errors: StructuredLogEvent[] = [];
+  info(ev: StructuredLogEvent): void {
+    this.infos.push(ev);
+  }
+  warn(ev: StructuredLogEvent): void {
+    this.warns.push(ev);
+  }
+  error(ev: StructuredLogEvent): void {
+    this.errors.push(ev);
+  }
+}
 
 const TARGET: ReplyTarget = { messageId: "msg-001", channelId: "chan-111" };
 
@@ -298,6 +317,45 @@ describe("ReplyPublisher", () => {
       ).resolves.toBeUndefined();
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe("logging", () => {
+    it("logs reply.success on publishSuccess", async () => {
+      const discord = new FakeDiscordMessageTarget();
+      const logger = new FakeLogger();
+      const publisher = createReplyPublisher({ discord, logger });
+
+      await publisher.publishSuccess(TARGET, "hello");
+
+      const ev = logger.infos.find((e) => e.event === "reply.success");
+      expect(ev).toBeDefined();
+      expect(ev?.channelId).toBe(TARGET.channelId);
+    });
+
+    it("logs reply.failure on publishFailure", async () => {
+      const discord = new FakeDiscordMessageTarget();
+      const logger = new FakeLogger();
+      const publisher = createReplyPublisher({ discord, logger });
+
+      await publisher.publishFailure(TARGET, "timeout");
+
+      const ev = logger.infos.find((e) => e.event === "reply.failure");
+      expect(ev).toBeDefined();
+      expect(ev?.errorCategory).toBe("timeout");
+    });
+
+    it("logs discord.error with category when Discord send fails", async () => {
+      const discord = new FakeDiscordMessageTarget();
+      discord.setReplyError({ kind: "deleted-message" });
+      const logger = new FakeLogger();
+      const publisher = createReplyPublisher({ discord, logger });
+
+      await publisher.publishSuccess(TARGET, "hello");
+
+      const ev = logger.errors.find((e) => e.event === "discord.error");
+      expect(ev).toBeDefined();
+      expect(ev?.errorCategory).toBe("deleted-message");
     });
   });
 });
