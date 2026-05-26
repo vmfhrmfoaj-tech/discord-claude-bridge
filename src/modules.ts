@@ -99,6 +99,9 @@ export interface SessionStore {
 export interface ReplyTarget {
   messageId: string;
   channelId: string;
+  requestId?: string;
+  guildId?: string;
+  threadId?: string;
 }
 
 export interface ReplyPublisher {
