@@ -109,7 +109,9 @@ const BOT_ID = "bot-999";
 const GUILD_ID = "guild-1";
 const CHANNEL_ID = "chan-100";
 
-function mention(overrides: Partial<DiscordMessageEvent> = {}): DiscordMessageEvent {
+function mention(
+  overrides: Partial<DiscordMessageEvent> = {}
+): DiscordMessageEvent {
   return {
     id: "msg-1",
     content: `<@${BOT_ID}> hello world`,
@@ -198,9 +200,7 @@ describe("E2E: fake adapter mention-to-reply flow", () => {
   // --- Non-mention ignored ---
 
   it("ignores non-mention and does not enqueue a job", async () => {
-    const result = await sys.ingress.receive(
-      mention({ mentionsBot: false })
-    );
+    const result = await sys.ingress.receive(mention({ mentionsBot: false }));
     await sys.queue.stop();
 
     expect(result.kind).toBe("ignored");
@@ -209,9 +209,7 @@ describe("E2E: fake adapter mention-to-reply flow", () => {
   });
 
   it("ignores bot messages and does not enqueue a job", async () => {
-    const result = await sys.ingress.receive(
-      mention({ authorIsBot: true })
-    );
+    const result = await sys.ingress.receive(mention({ authorIsBot: true }));
     await sys.queue.stop();
 
     expect(result.kind).toBe("ignored");
@@ -237,8 +235,18 @@ describe("E2E: fake adapter mention-to-reply flow", () => {
 
   it("keeps separate sessions for thread vs channel scope", async () => {
     sys = buildSystem([
-      { kind: "success", text: "Thread reply", sessionId: "sess-thread", exitCode: 0 },
-      { kind: "success", text: "Channel reply", sessionId: "sess-chan", exitCode: 0 }
+      {
+        kind: "success",
+        text: "Thread reply",
+        sessionId: "sess-thread",
+        exitCode: 0
+      },
+      {
+        kind: "success",
+        text: "Channel reply",
+        sessionId: "sess-chan",
+        exitCode: 0
+      }
     ]);
     await sys.queue.start();
 

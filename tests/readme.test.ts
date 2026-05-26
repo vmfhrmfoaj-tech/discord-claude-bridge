@@ -39,6 +39,12 @@ describe("README acceptance criteria", () => {
     expect(readme).toMatch(/e2e-fake/i);
   });
 
+  it("documents the Claude CLI adapter smoke command", () => {
+    expect(readme).toMatch(/npm run smoke:claude/);
+    expect(readme).toMatch(/RUN_CLAUDE_SMOKE=1/);
+    expect(readme).toMatch(/npm run test:smoke:claude/);
+  });
+
   it("explains Claude CLI Adapter with host auth", () => {
     expect(readme).toMatch(/claude auth/i);
     expect(readme).toMatch(/Claude Code CLI/);

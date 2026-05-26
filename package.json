@@ -10,7 +10,9 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "npm run build && RESPONSE_MODE=echo node dist/main.js",
     "start": "node dist/main.js",
+    "smoke:claude": "npm run build && node dist/smoke-claude.js",
     "test": "vitest run",
+    "test:smoke:claude": "RUN_CLAUDE_SMOKE=1 vitest run tests/smoke-claude-real.test.ts",
     "lint": "eslint .",
     "format:check": "prettier --check package.json tsconfig.json tsconfig.build.json eslint.config.js vitest.config.ts 'src/**/*.ts' 'tests/**/*.ts'",
     "typecheck": "tsc --noEmit"
