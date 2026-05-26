@@ -8,6 +8,16 @@ export {
   createScaffoldRuntime,
   type ScaffoldRuntimeOptions
 } from "./scaffold-runtime.js";
+export {
+  createFakeDiscordIngress,
+  type FakeDiscordIngress,
+  type FakeDiscordIngressDeps,
+  type FakeDiscordIngressMessageResult
+} from "./fake-discord-ingress.js";
+export {
+  createMentionParser,
+  type MentionParserConfig
+} from "./mention-parser.js";
 export type { Runtime, RuntimeDependencies } from "./runtime.js";
 export {
   moduleSeams,
