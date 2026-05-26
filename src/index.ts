@@ -1,5 +1,10 @@
 export { createRuntime } from "./runtime.js";
 export {
+  ConfigValidationError,
+  createConfigLoader,
+  type ConfigLoaderDeps
+} from "./config-loader.js";
+export {
   createScaffoldRuntime,
   type ScaffoldRuntimeOptions
 } from "./scaffold-runtime.js";
