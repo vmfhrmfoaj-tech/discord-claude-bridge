@@ -41,7 +41,14 @@ export type MentionParseResult =
   | { kind: "accepted"; request: MentionRequest }
   | {
       kind: "ignored";
-      reason: "not-mentioned" | "self-message" | "empty-prompt" | "too-large";
+      reason:
+        | "not-mentioned"
+        | "bot-message"
+        | "self-message"
+        | "empty-prompt"
+        | "too-large"
+        | "disallowed-guild"
+        | "disallowed-channel";
     };
 
 export interface MentionParser {
