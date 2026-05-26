@@ -209,3 +209,145 @@ gh issue create \
 - 구현 중 scope가 커지면 기존 issue를 키우지 말고 새 issue로 분리한다.
 - ADR과 충돌하는 구현 결정이 생기면 먼저 ADR을 추가하거나 수정한다.
 - `docs/context.md`의 domain vocabulary와 `docs/architecture.md`의 Module map을 issue 설명에서도 유지한다.
+
+
+
+
+
+
+
+
+#### to-prd prompt example
+```
+[$to-prd] 프로젝트 문서들을 기준으로 v1 runtime 구현 PRD를 작성해줘.
+
+반드시 참고할 문서:
+- README.md
+- PROJECT_GOAL.MD
+- AGENTS.MD
+- CLAUDE.MD
+- CLAUDE_DIFF.MD
+- config.example.yaml
+- .env.example
+- docs/context.md
+- docs/architecture.md
+- docs/adr/
+
+목표:
+- 현재 repo는 Docs + Examples Only phase야.
+- 다음 phase에서 구현할 v1 Self-hosted Mention Bridge runtime PRD를 작성해줘.
+- v1은 Discord mention을 host에 로그인된 Claude Code CLI 응답으로 연결하는 self-hosted bot app이야.
+- Anthropic API key integration, reusable framework/library, slash command, DM, Docker, Redis, SQLite, web dashboard는 v1 scope가 아니야.
+
+PRD에 반드시 포함할 것:
+- Problem Statement
+- Solution
+- 아주 상세한 User Stories
+- Implementation Decisions
+- Testing Decisions
+- Out of Scope
+- Further Notes
+
+작성 기준:
+- 프로젝트 vocabulary를 따라줘: Module, Interface, Implementation, Seam, Adapter, Depth, Leverage, Locality.
+- "service", "component", "boundary" 대신 Module, Adapter, Seam 용어를 우선해줘.
+- ADR 결정을 지켜줘:
+  - v1은 Bot App, not framework
+  - Local Node Process, not Docker-first
+  - Claude CLI Adapter, not Anthropic API Adapter
+  - In-memory Job Queue, not Redis
+  - JSON Session Store, not SQLite
+  - Discord-triggered Claude tool execution은 no-tools policy
+- source scaffold나 코드는 만들지 말고 PRD 문서만 작성해줘.
+- PRD는 GitHub issue body로도 사용할 수 있게 issue-ready 형태로 작성해줘.
+- 상단에 `Triage label: ready-for-agent`를 포함해줘.
+
+구현 범위로 다룰 Module:
+- Discord Ingress
+- Mention Parser
+- In-memory Job Queue
+- Claude CLI Worker
+- Claude CLI Adapter
+- Session Store
+- Reply Publisher
+- Config Loader
+- Structured Logger
+
+테스트 방향:
+- external Discord/Claude calls는 fake Adapter로 대체
+- Mention Parser unit tests
+- JSON Session Store contract tests
+- Claude CLI Adapter command construction/output parsing tests
+- Queue Worker timeout/failure tests
+- Reply Publisher split/error response tests
+- end-to-end fake adapter mention-to-reply flow
+
+출력:
+- 먼저 PRD 초안을 작성해줘.
+- 가능하면 `docs/prd-v1-runtime-implementation.md`에 저장해줘.
+- GitHub issue tracker가 사용 가능하면 PRD tracking issue로 등록해줘.
+- issue tracker를 사용할 수 없으면 repo 문서로만 남기고, 나중에 issue로 등록할 수 있게 만들어줘.
+```
+
+
+
+
+
+#### to-issues prompt example
+```
+[$to-issues] GitHub issue #1의 PRD를 기준으로 v1 runtime 구현을 independently-grabbable GitHub issues로 나눠줘.
+
+반드시 참고할 문서:
+- GitHub issue #1: PRD parent issue
+- docs/prd-v1-runtime-implementation.md
+- docs/prd-and-issue-management.md
+- docs/context.md
+- docs/architecture.md
+- docs/adr/
+
+목표:
+- PRD 전체를 바로 구현하는 큰 issue로 만들지 말고, agent가 하나씩 잡아 완료할 수 있는 작은 implementation issues로 쪼개줘.
+- 각 issue는 parent issue #1을 링크해야 해.
+- 각 issue에는 `ready-for-agent`와 `implementation` label을 붙여줘.
+- test 중심 issue가 따로 필요하면 `tests` label도 붙여줘.
+- issue title과 body는 프로젝트 용어를 따라 `Module`, `Interface`, `Adapter`, `Session Store`, `Claude CLI Adapter`, `Job Queue`, `Reply Publisher` 같은 vocabulary를 사용해줘.
+- ADR의 결정사항을 어기지 마. 특히 v1은 Local Node Process, Claude CLI Adapter, in-memory Job Queue, JSON Session Store, no-tools policy가 기본이야.
+
+쪼개는 방식:
+- 단순히 layer별/horizontal issue로만 나누지 말고, 가능한 한 tracer bullet / vertical slice 방식으로 나눠줘.
+- 각 issue는 완료 후 독립적으로 검증 가능해야 해.
+- 그래도 deep Module 단위 테스트가 중요한 부분은 별도 issue로 분리해도 돼.
+- 너무 큰 issue는 나누고, 너무 작은 issue는 합쳐줘.
+
+원하는 출력/진행:
+1. 먼저 issue breakdown 초안을 보여줘.
+2. 각 항목에 아래 정보를 포함해줘:
+   - Title
+   - Type: HITL 또는 AFK
+   - Blocked by
+   - User stories covered
+   - 왜 이 granularity가 적절한지
+3. 아직 GitHub issue를 만들지 말고, 내가 승인할 때까지 기다려줘.
+4. 내가 승인하면 dependency order대로 GitHub issues를 생성해줘.
+5. 생성되는 issue body는 아래 구조를 사용해줘:
+   - Parent
+   - What to build
+   - Acceptance criteria
+   - Blocked by
+6. parent issue #1은 수정하거나 닫지 마.
+
+브랜치 전략:
+- PRD 단위 branch를 만들지 말고 issue 단위 branch를 전제로 issue를 작성해줘.
+- branch 예시는 `issue-2-scaffold-runtime`, `issue-3-config-loader`처럼 issue 번호 기반으로 안내해줘.
+
+추가로 고려할 slice 후보:
+- Minimal Node 22 TypeScript ESM runtime scaffold
+- Config Loader and startup validation
+- Mention-only Discord Ingress path with fake Discord input
+- In-memory Job Queue and Worker path
+- Claude CLI Adapter contract with fake process runner
+- JSON Session Store continuity path
+- Reply Publisher long/failure reply behavior
+- End-to-end fake adapter mention-to-reply flow
+- README run/test docs and local smoke guidance
+```
