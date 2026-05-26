@@ -115,6 +115,30 @@ implementation
 tests
 ```
 
+## Branch Strategy
+
+PRD 단위 branch보다 issue 단위 branch를 기본으로 사용한다.
+
+PRD는 parent tracking issue와 repo 문서로 관리한다. 실제 구현은 작은 implementation issue마다 독립 branch를 만든다. PRD 전체를 하나의 branch에서 구현하면 작업 기간이 길어지고, review, conflict resolution, rollback이 무거워질 수 있다.
+
+추천 branch naming:
+
+```txt
+issue-2-scaffold-runtime
+issue-3-config-loader
+issue-4-mention-parser
+issue-5-session-store
+issue-6-claude-cli-adapter
+```
+
+PRD 자체를 작성하거나 크게 수정할 때만 docs branch를 사용할 수 있다.
+
+```txt
+docs/prd-v1-runtime
+```
+
+구현 작업은 PRD branch에서 이어가지 않는다. 각 implementation issue는 `main`에서 새 branch를 만들고, PR은 해당 issue를 close하도록 연결한다.
+
 ## Issue Shape
 
 좋은 implementation issue는 작고 독립적이어야 한다.
