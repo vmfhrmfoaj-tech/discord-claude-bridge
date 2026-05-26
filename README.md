@@ -90,6 +90,28 @@ npm test -- tests/e2e-fake-flow.test.ts
 
 `e2e-fake-flow` test는 `FakeDiscordIngress`와 `FakeClaudeAdapter`를 사용해 mention → queue → worker → reply 경로를 end-to-end로 실행합니다.
 
+### Claude CLI adapter smoke
+
+Discord token, channel 설정, mention event 없이 Claude CLI 호출부만 검증하려면:
+
+```bash
+npm run smoke:claude
+```
+
+이 명령은 host에 설치된 `claude` CLI를 직접 실행하고 adapter result, stdout/stderr preview, exit code, timeout 여부를 출력합니다.
+
+기본 test suite는 실제 Claude CLI를 호출하지 않습니다. 실제 CLI 호출을 포함한 opt-in integration test는 아래처럼 실행합니다.
+
+```bash
+RUN_CLAUDE_SMOKE=1 npm test -- tests/smoke-claude-real.test.ts
+```
+
+또는 전용 script를 사용할 수 있습니다.
+
+```bash
+npm run test:smoke:claude
+```
+
 ## Local Smoke Guidance
 
 Bot을 Discord에 배치하기 전에 아래 항목을 순서대로 확인합니다.
@@ -140,13 +162,20 @@ npm run typecheck
 npm test -- tests/e2e-fake-flow.test.ts --reporter=verbose
 ```
 
+### 5. Claude CLI adapter smoke
+
+```bash
+npm run smoke:claude
+RUN_CLAUDE_SMOKE=1 npm test -- tests/smoke-claude-real.test.ts
+```
+
 전체 test suite:
 
 ```bash
 npm test
 ```
 
-### 5. Runtime 구동 확인
+### 6. Runtime 구동 확인
 
 ```bash
 npm run build && npm start

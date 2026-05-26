@@ -18,7 +18,9 @@ function captureConsoleLogs(): { logs: string[]; restore: () => void } {
   });
   return {
     logs,
-    restore: () => spy.mockRestore()
+    restore: () => {
+      spy.mockRestore();
+    }
   };
 }
 
@@ -29,7 +31,9 @@ function captureConsoleWarn(): { warns: string[]; restore: () => void } {
   });
   return {
     warns,
-    restore: () => spy.mockRestore()
+    restore: () => {
+      spy.mockRestore();
+    }
   };
 }
 
@@ -40,7 +44,9 @@ function captureConsoleError(): { errors: string[]; restore: () => void } {
   });
   return {
     errors,
-    restore: () => spy.mockRestore()
+    restore: () => {
+      spy.mockRestore();
+    }
   };
 }
 
@@ -62,7 +68,7 @@ describe("StructuredLogger", () => {
 
       restore();
       expect(logs).toHaveLength(1);
-      const parsed = parseLog(logs[0]!);
+      const parsed = parseLog(logs[0] ?? "");
       expect(parsed["event"]).toBe("runtime.started");
       expect(parsed["level"]).toBe("info");
     });
@@ -81,7 +87,7 @@ describe("StructuredLogger", () => {
       logger.info(ev);
 
       restore();
-      const parsed = parseLog(logs[0]!);
+      const parsed = parseLog(logs[0] ?? "");
       expect(parsed["requestId"]).toBe("req-abc");
       expect(parsed["guildId"]).toBe("guild-123");
       expect(parsed["channelId"]).toBe("chan-456");
@@ -101,7 +107,7 @@ describe("StructuredLogger", () => {
       });
 
       restore();
-      const parsed = parseLog(logs[0]!);
+      const parsed = parseLog(logs[0] ?? "");
       expect(parsed["jobStatus"]).toBe("success");
       expect(parsed["durationMs"]).toBe(1234);
       expect(parsed["exitCode"]).toBe(0);
@@ -114,7 +120,7 @@ describe("StructuredLogger", () => {
       logger.info({ event: "test.event" });
 
       restore();
-      const parsed = parseLog(logs[0]!);
+      const parsed = parseLog(logs[0] ?? "");
       expect(typeof parsed["ts"]).toBe("string");
     });
 
@@ -125,7 +131,7 @@ describe("StructuredLogger", () => {
       logger.info({ event: "test.event", requestId: undefined });
 
       restore();
-      const parsed = parseLog(logs[0]!);
+      const parsed = parseLog(logs[0] ?? "");
       expect("requestId" in parsed).toBe(false);
     });
   });
@@ -139,7 +145,7 @@ describe("StructuredLogger", () => {
 
       restore();
       expect(warns).toHaveLength(1);
-      const parsed = parseLog(warns[0]!);
+      const parsed = parseLog(warns[0] ?? "");
       expect(parsed["event"]).toBe("session.corrupt");
       expect(parsed["level"]).toBe("warn");
     });
@@ -154,7 +160,7 @@ describe("StructuredLogger", () => {
 
       restore();
       expect(errors).toHaveLength(1);
-      const parsed = parseLog(errors[0]!);
+      const parsed = parseLog(errors[0] ?? "");
       expect(parsed["event"]).toBe("cli.execute.failure");
       expect(parsed["level"]).toBe("error");
       expect(parsed["errorCategory"]).toBe("timeout");
