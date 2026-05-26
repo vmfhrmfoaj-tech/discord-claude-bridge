@@ -17,7 +17,8 @@
 9. local `main`으로 복귀 후 pull
 10. 다음 issue 반복
 11. 필요한 시점에 architecture review
-12. 모든 acceptance가 끝나면 PRD 종료
+12. 구현 완료 후 runtime validation issues로 실제 동작 검증
+13. 모든 acceptance와 validation이 끝나면 PRD 종료
 
 PRD는 제품과 아키텍처 방향의 source of truth이고, GitHub Issue는 agent나 사람이 실제로 집어갈 work queue다. 큰 PRD 하나를 그대로 구현하지 않고, 독립적으로 완료 가능한 작은 implementation issue로 쪼갠다.
 
@@ -328,13 +329,123 @@ Architecture review 결과 처리:
 - 새 domain term이 생기면 `docs/context.md`에 추가한다.
 - 기존 ADR과 충돌하면 ADR을 추가하거나 수정한 뒤 구현한다.
 
-## Stage 11: Close PRD
+## Stage 11: Validate Runtime With Smoke Issues
 
-모든 implementation issue가 완료되면 PRD parent issue를 닫기 전에 최종 확인을 한다.
+PRD implementation issues가 모두 끝난 뒤에는 새 PRD를 만들기보다 validation issue 묶음으로 실제 동작을 확인한다. 이 단계는 제품 방향을 다시 정의하는 단계가 아니라, 구현된 runtime이 실제 환경에서 기대한 경로로 도는지 검증하는 단계다.
+
+v1 runtime validation은 다음 순서로 진행한다.
+
+1. Discord echo smoke test
+2. Claude CLI Adapter standalone test
+3. Discord to Claude integrated smoke test
+
+각 validation item은 독립 issue로 만들고, 각 issue마다 최신 `main`에서 branch를 만든다. 이 repo에서는 issue 생성 자체는 사용자가 명시적으로 요청할 때만 진행한다.
+
+추천 labels:
+
+```txt
+ready-for-agent
+tests
+implementation
+```
+
+추천 branch naming:
+
+```txt
+issue-<number>-discord-echo-smoke
+issue-<number>-claude-cli-smoke
+issue-<number>-integrated-smoke
+```
+
+### Discord Echo Smoke Test
+
+목표는 Claude CLI를 완전히 제외하고 Discord 연결만 검증하는 것이다.
+
+Acceptance 예시:
+
+- `npm run dev`로 runtime이 시작된다.
+- 실제 Discord에서 bot mention을 보내면 같은 채널에 `[에코] <원문>` 형태로 응답한다.
+- bot 자신의 메시지에는 반응하지 않는다.
+- mention parsing, channel routing, reply publishing이 구조화 로그에 남는다.
+- Claude CLI는 호출되지 않는다.
+
+이 검증은 runtime mode로 분리하는 것이 좋다.
+
+```env
+RESPONSE_MODE=echo
+```
+
+`RESPONSE_MODE=echo`는 Discord ingress와 reply publisher를 실제로 사용하고, Claude CLI Adapter만 우회한다. 나중에 `mock`, `dry-run` 같은 mode가 필요해져도 같은 축으로 확장할 수 있다.
+
+### Claude CLI Adapter Standalone Test
+
+목표는 Discord와 무관하게 Claude CLI 호출부만 검증하는 것이다.
+
+Acceptance 예시:
+
+- 고정 prompt를 Claude CLI Adapter에 전달할 수 있다.
+- stdout, stderr, exit code가 예상대로 수집된다.
+- timeout과 실패 exit가 operator에게 이해 가능한 error로 정리된다.
+- Discord token, channel, mention event가 없어도 실행 가능하다.
+
+이 검증은 별도 script나 test entrypoint로 둘 수 있다.
+
+```bash
+npm run smoke:claude
+```
+
+### Integrated Smoke Test
+
+앞의 두 validation issue가 통과한 뒤 Discord mention에서 Claude CLI 응답까지 전체 경로를 검증한다.
+
+Acceptance 예시:
+
+- 실제 Discord mention이 job으로 들어간다.
+- Claude CLI Adapter가 prompt를 받고 응답을 반환한다.
+- Discord reply가 원래 channel 또는 thread 정책에 맞게 발행된다.
+- 실패 시 사용자에게 적절한 failure reply가 가고, 구조화 로그로 lifecycle을 추적할 수 있다.
+- 중복 응답이나 self-reply loop가 없다.
+
+통합 검증은 다음 mode를 사용한다.
+
+```env
+RESPONSE_MODE=claude
+```
+
+### Bug Handling During Validation
+
+Validation 중 발견한 문제는 scope에 따라 처리한다.
+
+현재 validation issue의 acceptance를 막는 직접 버그는 같은 issue branch에서 고친다. 예를 들어 `issue-20-discord-echo-smoke`에서 bot mention을 받지 못한다면, Discord ingress 설정이나 mention parser wiring 문제는 그 branch에서 수정하고 같은 PR에 포함한다. 이 경우 PR은 validation과 그 validation을 통과하기 위한 최소 runtime fix를 함께 담는다.
+
+현재 issue scope 밖의 문제는 별도 bug issue로 분리한다. 예를 들어 Discord echo 검증 중 Claude CLI timeout 정책 문제가 눈에 띄었지만 echo mode에서는 Claude CLI를 호출하지 않는다면, 현재 branch에서 고치지 않고 bug issue를 만든다. 해당 bug는 나중에 최신 `main`에서 별도 branch를 만들어 처리한다.
+
+추천 bug branch naming:
+
+```txt
+bug-<number>-claude-timeout-handling
+bug-<number>-discord-self-reply-loop
+```
+
+기준은 다음과 같다.
+
+- Same branch: 현재 issue acceptance를 만족하려면 반드시 고쳐야 하는 문제
+- Separate bug issue: 현재 issue를 통과하는 데 필요 없거나, 다른 Module/Interface의 behavior를 바꾸는 문제
+- Separate bug issue: 원인 분석이 길어져 현재 validation PR을 크게 만들 위험이 있는 문제
+- Separate bug issue: 이미 merge된 기능의 regression이고 독립적으로 재현 가능한 문제
+
+별도 bug issue를 만들 때는 재현 절차, 기대 동작, 실제 동작, 관련 로그, 발견한 validation issue를 적는다. PR은 `Closes #<BUG_ISSUE_NUMBER>`로 bug issue를 닫고, 필요하면 원래 validation issue에는 follow-up link만 남긴다.
+
+Validation issue PR을 merge한 뒤에는 local `main`으로 돌아와 pull한 다음 다음 validation issue를 시작한다.
+
+## Stage 12: Close PRD
+
+모든 implementation issue와 runtime validation issue가 완료되면 PRD parent issue를 닫기 전에 최종 확인을 한다.
 
 PRD 종료 checklist:
 
 - PRD acceptance가 구현과 테스트로 충족됐다.
+- Runtime validation issues가 통과했다.
 - README run/test documentation이 최신이다.
 - `docs/context.md`, `docs/architecture.md`, `docs/adr/`가 최종 구조와 충돌하지 않는다.
 - open follow-up issue가 PRD 종료를 막는 항목인지 future work인지 분류됐다.
