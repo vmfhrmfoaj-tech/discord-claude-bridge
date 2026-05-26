@@ -22,6 +22,16 @@ Claude CLI를 완전히 우회하고 Discord ingress, mention parsing, job routi
 
 Discord 없이 고정 prompt를 Claude CLI Adapter에 직접 전달하고 stdout, stderr, exit code, timeout, failure handling을 검증한다. Discord token과 channel 없이 실행 가능하다.
 
+이 tier는 실제 host의 Claude CLI 설치, auth, network 상태에 의존하므로 기본 test suite가 아니라 opt-in/host-run 검증으로 다룬다. Agent sandbox나 CI처럼 network가 제한된 환경에서는 Claude CLI가 stdout/stderr 없이 timeout될 수 있다. 이런 timeout은 adapter bug로 단정하지 않고 실행 환경을 함께 기록한 뒤 host shell에서 재확인한다.
+
+Claude CLI Adapter의 v1 command contract는 다음 shape를 기준으로 한다.
+
+```bash
+claude -p "<prompt>" --output-format json --tools ""
+```
+
+`--output-format json`은 adapter가 structured result를 parse하기 위한 계약이다. 이 flag를 제거하면 Claude CLI가 text 응답으로 성공하더라도 adapter가 `invalid-json`으로 처리하는 것이 정상이다. `--tools ""`는 Discord-originated prompt에서 Claude Code tools를 비활성화하는 no-tools policy다.
+
 **Tier 3 — End-to-end integration (`RESPONSE_MODE=claude`)**
 
 앞의 두 tier가 통과한 뒤, 실제 Discord mention에서 Claude CLI 응답까지 전체 경로를 검증한다. 두 외부 의존성이 모두 필요하다.
@@ -35,3 +45,5 @@ Discord 없이 고정 prompt를 Claude CLI Adapter에 직접 전달하고 stdout
 - Tier 1은 CI에서 Discord bot token만으로 실행할 수 있는 경로를 열어둔다.
 - 각 tier를 독립 issue로 관리하므로 특정 tier 실패 시 해당 tier에서만 bugfix가 일어난다.
 - `RESPONSE_MODE`가 테스트 전용 환경 설정이 되지 않도록 주의한다 — production에서도 유효한 값은 `claude`뿐이다.
+- 실제 Claude CLI smoke 실패는 실행 환경과 함께 판정한다. stdout/stderr가 비어 있는 timeout은 sandbox/CI network 제한일 수 있다.
+- `ProcessRunner`는 shell interpolation을 피하기 위해 argv 배열 호출을 유지한다. `shell: true`는 timeout 후 shell만 종료되고 Claude child process가 남을 수 있으므로 기본 runner에서 사용하지 않는다.

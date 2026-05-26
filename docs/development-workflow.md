@@ -394,7 +394,20 @@ Acceptance 예시:
 
 ```bash
 npm run smoke:claude
+RUN_CLAUDE_SMOKE=1 npm test -- tests/smoke-claude-real.test.ts
 ```
+
+Claude CLI Adapter smoke는 host의 Claude CLI 설치, auth, network 상태까지 함께 검증한다. Agent sandbox나 CI처럼 network가 제한된 환경에서는 stdout/stderr 없이 timeout될 수 있으므로, timeout만 보고 adapter bug로 단정하지 않는다.
+
+기대 command shape:
+
+```bash
+claude -p "<prompt>" --output-format json --tools ""
+```
+
+`--output-format json`은 adapter parse 계약이다. 이 flag를 빼면 CLI가 text 응답으로 성공하더라도 adapter가 `invalid-json`으로 처리하는 것이 정상이다. `--tools ""`는 Discord-originated prompt에서 Claude Code tools를 비활성화하는 v1 no-tools policy다.
+
+`ProcessRunner`는 shell interpolation을 피하기 위해 argv 배열 호출을 유지한다. `shell: true`는 timeout 후 shell만 종료되고 Claude child process가 남을 수 있으므로 기본 runner에 넣지 않는다.
 
 ### Integrated Smoke Test
 
@@ -413,6 +426,30 @@ Acceptance 예시:
 ```env
 RESPONSE_MODE=claude
 ```
+
+자동화된 integrated smoke는 opt-in으로 실행한다.
+
+```bash
+RUN_INTEGRATED_SMOKE=1 npm test -- tests/integrated-claude-smoke.test.ts
+```
+
+### Smoke Result Notes
+
+Smoke issue나 PR에는 다음 정보를 남긴다.
+
+- prompt 요약
+- argv shape 또는 runtime mode
+- structured logs: `smoke.claude.starting`, `cli.execute.success|failure`, `smoke.claude.succeeded|failed`, job lifecycle event
+- stdout/stderr preview
+- exitCode
+- timedOut 여부
+- 실행 환경: host shell, agent sandbox, CI 등
+
+Timeout triage:
+
+- stdout/stderr가 비어 있는 timeout이면 먼저 실행 환경을 확인한다.
+- agent sandbox 또는 CI에서 실패하고 host shell에서 성공하면 environment limitation으로 기록한다.
+- host shell에서도 실패하면 adapter, Claude CLI install/auth, config, network 문제로 진단한다.
 
 ### Bug Handling During Validation
 
