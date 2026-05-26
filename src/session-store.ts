@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { SessionStore, StructuredLogger } from "./modules.js";
 
 // ---------------------------------------------------------------------------
@@ -7,11 +8,13 @@ import type { SessionStore, StructuredLogger } from "./modules.js";
 export interface FileSystem {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  mkdir(dirPath: string, opts: { recursive: boolean }): Promise<void>;
 }
 
 export const realFileSystem: FileSystem = {
   readFile: (path) => readFile(path, "utf8"),
-  writeFile: (path, content) => writeFile(path, content, "utf8")
+  writeFile: (path, content) => writeFile(path, content, "utf8"),
+  mkdir: (dirPath, opts) => mkdir(dirPath, opts).then(() => undefined)
 };
 
 // ---------------------------------------------------------------------------
@@ -41,6 +44,7 @@ export class JsonSessionStore implements SessionStore {
   async setSessionId(scopeKey: string, sessionId: string): Promise<void> {
     const map = await this.load();
     map[scopeKey] = sessionId;
+    await this.fs.mkdir(dirname(this.storePath), { recursive: true });
     await this.fs.writeFile(this.storePath, JSON.stringify(map, null, 2));
   }
 

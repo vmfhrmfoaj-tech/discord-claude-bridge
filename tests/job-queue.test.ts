@@ -520,6 +520,27 @@ describe("JobQueue", () => {
     });
   });
 
+  describe("worker: unexpected error", () => {
+    it("calls publishFailure with internal-error when setSessionId throws unexpectedly", async () => {
+      const adapter = new FakeClaudeCliAdapter(); // returns success
+      const publisher = new FakeReplyPublisher();
+      const sessionStore: SessionStore = {
+        getSessionId: () => Promise.resolve(undefined),
+        setSessionId: () => Promise.reject(new Error("disk full"))
+      };
+
+      const { queue } = makeQueue({ adapter, publisher, sessionStore });
+      await queue.start();
+      await queue.enqueue(makeMentionRequest({ messageId: "msg-err" }));
+      await queue.stop();
+
+      expect(publisher.failureCalls).toHaveLength(1);
+      expect(publisher.failureCalls[0]?.category).toBe("internal-error");
+      expect(publisher.failureCalls[0]?.target.messageId).toBe("msg-err");
+      expect(publisher.successCalls).toHaveLength(0);
+    });
+  });
+
   describe("concurrency", () => {
     it("processes only one job at a time with concurrency=1", async () => {
       const executionOrder: string[] = [];

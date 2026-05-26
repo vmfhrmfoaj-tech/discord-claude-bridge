@@ -24,6 +24,7 @@ class FakeLogger implements StructuredLogger {
 class FakeFileSystem implements FileSystem {
   private files: Map<string, string> = new Map();
   private failPaths: Set<string> = new Set();
+  mkdirCalls: Array<{ path: string; recursive: boolean }> = [];
 
   readFile(path: string): Promise<string> {
     const content = this.files.get(path);
@@ -42,6 +43,11 @@ class FakeFileSystem implements FileSystem {
       );
     }
     this.files.set(path, content);
+    return Promise.resolve();
+  }
+
+  mkdir(dirPath: string, opts: { recursive: boolean }): Promise<void> {
+    this.mkdirCalls.push({ path: dirPath, recursive: opts.recursive });
     return Promise.resolve();
   }
 
@@ -138,6 +144,12 @@ describe("JsonSessionStore", () => {
     await store.setSessionId(channelId, "sess-channel");
     const result = await store.getSessionId(channelId);
     expect(result).toBe("sess-channel");
+  });
+
+  // Extra: setSessionId ensures parent directory exists
+  it("ensures parent directory exists before writing on first write", async () => {
+    await store.setSessionId("key", "sess");
+    expect(fakeFs.mkdirCalls.map((c) => c.path)).toContain(".data");
   });
 
   // Extra: setSessionId on missing file creates new store from scratch
