@@ -234,6 +234,9 @@ function createLogger(options: LocalRuntimeOptions): StructuredLogger {
     info(event) {
       options.log?.(event);
     },
+    warn(event) {
+      options.log?.(event);
+    },
     error(event) {
       options.log?.(event);
     }

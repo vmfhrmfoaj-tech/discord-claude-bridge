@@ -8,8 +8,30 @@ import type {
   MentionRequest,
   ReplyPublisher,
   ReplyTarget,
-  SessionStore
+  SessionStore,
+  StructuredLogEvent,
+  StructuredLogger
 } from "../src/modules.js";
+
+// ---------------------------------------------------------------------------
+// Fake logger
+// ---------------------------------------------------------------------------
+
+class FakeLogger implements StructuredLogger {
+  infos: StructuredLogEvent[] = [];
+  warns: StructuredLogEvent[] = [];
+  errors: StructuredLogEvent[] = [];
+
+  info(ev: StructuredLogEvent): void {
+    this.infos.push(ev);
+  }
+  warn(ev: StructuredLogEvent): void {
+    this.warns.push(ev);
+  }
+  error(ev: StructuredLogEvent): void {
+    this.errors.push(ev);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -87,6 +109,7 @@ function makeQueue(options?: {
   adapter?: ClaudeCliAdapter;
   publisher?: ReplyPublisher;
   sessionStore?: SessionStore;
+  logger?: StructuredLogger;
 }) {
   const adapter = options?.adapter ?? new FakeClaudeCliAdapter();
   const publisher = options?.publisher ?? new FakeReplyPublisher();
@@ -95,6 +118,7 @@ function makeQueue(options?: {
     adapter,
     publisher,
     sessionStore,
+    logger: options?.logger,
     config: {
       concurrency: options?.concurrency ?? 1,
       maxPendingJobs: options?.maxPendingJobs ?? 10
@@ -558,6 +582,114 @@ describe("JobQueue", () => {
         guildId: "guild-123",
         threadId: "thread-456"
       });
+    });
+  });
+
+  describe("logging", () => {
+    it("logs job.enqueued with requestId and channelId on accept", async () => {
+      const logger = new FakeLogger();
+      const { queue } = makeQueue({ logger });
+      await queue.start();
+
+      await queue.enqueue(
+        makeMentionRequest({ channelId: "chan-log", guildId: "guild-log" })
+      );
+      await queue.stop();
+
+      const enqueued = logger.infos.find((e) => e.event === "job.enqueued");
+      expect(enqueued).toBeDefined();
+      expect(typeof enqueued?.requestId).toBe("string");
+      expect(enqueued?.channelId).toBe("chan-log");
+      expect(enqueued?.guildId).toBe("guild-log");
+    });
+
+    it("logs job.completed with durationMs and jobStatus=success on success", async () => {
+      const logger = new FakeLogger();
+      const { queue } = makeQueue({ logger });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await queue.stop();
+
+      const completed = logger.infos.find((e) => e.event === "job.completed");
+      expect(completed).toBeDefined();
+      expect(completed?.jobStatus).toBe("success");
+      expect(typeof completed?.durationMs).toBe("number");
+    });
+
+    it("logs job.failed with errorCategory on adapter failure", async () => {
+      const logger = new FakeLogger();
+      const adapter = new FakeClaudeCliAdapter();
+      adapter.result = { kind: "failure", category: "timeout" };
+
+      const { queue } = makeQueue({ logger, adapter });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest());
+      await queue.stop();
+
+      const failed = logger.errors.find((e) => e.event === "job.failed");
+      expect(failed).toBeDefined();
+      expect(failed?.errorCategory).toBe("timeout");
+      expect(failed?.jobStatus).toBe("failure");
+    });
+
+    it("logs queue.full with channelId when queue rejects", async () => {
+      const logger = new FakeLogger();
+      const makeDeferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<ClaudeCliResult>((res) => {
+          resolve = () => res({ kind: "success", text: "ok", exitCode: 0 });
+        });
+        return { promise, resolve };
+      };
+      const d1 = makeDeferred();
+      const d2 = makeDeferred();
+      let callCount = 0;
+      const slowAdapter: ClaudeCliAdapter = {
+        execute: () => (++callCount === 1 ? d1.promise : d2.promise)
+      };
+
+      const { queue } = makeQueue({
+        logger,
+        adapter: slowAdapter,
+        concurrency: 1,
+        maxPendingJobs: 1
+      });
+      await queue.start();
+
+      await queue.enqueue(makeMentionRequest({ messageId: "m1" }));
+      await new Promise((r) => setTimeout(r, 0));
+      await queue.enqueue(makeMentionRequest({ messageId: "m2" }));
+      await queue.enqueue(
+        makeMentionRequest({ messageId: "m3", channelId: "chan-full" })
+      );
+
+      const fullLog = logger.warns.find((e) => e.event === "queue.full");
+      expect(fullLog).toBeDefined();
+      expect(fullLog?.channelId).toBe("chan-full");
+
+      d1.resolve();
+      d2.resolve();
+      await queue.stop();
+    });
+
+    it("does not include prompt text in any log event", async () => {
+      const logger = new FakeLogger();
+      const { queue } = makeQueue({ logger });
+      await queue.start();
+
+      await queue.enqueue(
+        makeMentionRequest({ prompt: "SECRET_PROMPT_CONTENT" })
+      );
+      await queue.stop();
+
+      const allLogs = JSON.stringify([
+        ...logger.infos,
+        ...logger.warns,
+        ...logger.errors
+      ]);
+      expect(allLogs).not.toContain("SECRET_PROMPT_CONTENT");
     });
   });
 });

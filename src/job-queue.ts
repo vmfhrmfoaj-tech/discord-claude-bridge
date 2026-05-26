@@ -6,7 +6,8 @@ import type {
   JobQueue,
   MentionRequest,
   ReplyPublisher,
-  SessionStore
+  SessionStore,
+  StructuredLogger
 } from "./modules.js";
 
 export interface QueueConfig {
@@ -25,6 +26,7 @@ export interface JobQueueDeps {
   publisher: ReplyPublisher;
   sessionStore: SessionStore;
   config: QueueConfig;
+  logger?: StructuredLogger;
 }
 
 interface Job {
@@ -33,7 +35,7 @@ interface Job {
 }
 
 export function createJobQueue(deps: JobQueueDeps): JobQueue {
-  const { adapter, publisher, sessionStore, config } = deps;
+  const { adapter, publisher, sessionStore, config, logger } = deps;
 
   let shuttingDown = false;
 
@@ -53,14 +55,18 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
 
   async function processJob(job: Job): Promise<void> {
     inFlightCount++;
+    const startMs = Date.now();
     try {
       const { request } = job;
-      const target = {
-        messageId: request.messageId,
-        channelId: request.channelId,
+      const meta = {
         requestId: job.requestId,
+        channelId: request.channelId,
         guildId: request.guildId,
         threadId: request.threadId
+      };
+      const target = {
+        messageId: request.messageId,
+        ...meta
       };
 
       let sessionId: string | undefined;
@@ -91,8 +97,21 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
           );
         }
         await publisher.publishSuccess(target, result.text);
+        logger?.info({
+          event: "job.completed",
+          ...meta,
+          jobStatus: "success",
+          durationMs: Date.now() - startMs
+        });
       } else {
         await publisher.publishFailure(target, result.category);
+        logger?.error({
+          event: "job.failed",
+          ...meta,
+          jobStatus: "failure",
+          errorCategory: result.category,
+          durationMs: Date.now() - startMs
+        });
       }
     } finally {
       inFlightCount--;
@@ -118,11 +137,25 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
     }
 
     if (pending.length >= config.maxPendingJobs) {
+      logger?.warn({
+        event: "queue.full",
+        channelId: request.channelId,
+        guildId: request.guildId,
+        threadId: request.threadId
+      });
       return Promise.resolve({ kind: "rejected", reason: "queue-full" });
     }
 
     const requestId = randomUUID();
     const job: Job = { requestId, request };
+
+    logger?.info({
+      event: "job.enqueued",
+      requestId,
+      channelId: request.channelId,
+      guildId: request.guildId,
+      threadId: request.threadId
+    });
 
     if (inFlightCount < config.concurrency) {
       void processJob(job);

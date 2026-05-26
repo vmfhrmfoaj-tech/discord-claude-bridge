@@ -165,5 +165,6 @@ export interface StructuredLogEvent {
 
 export interface StructuredLogger {
   info(event: StructuredLogEvent): void;
+  warn(event: StructuredLogEvent): void;
   error(event: StructuredLogEvent): void;
 }

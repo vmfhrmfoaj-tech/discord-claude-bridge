@@ -1,7 +1,8 @@
 import type {
   ClaudeCliAdapter,
   ClaudeCliRequest,
-  ClaudeCliResult
+  ClaudeCliResult,
+  StructuredLogger
 } from "./modules.js";
 
 export interface ProcessRunOptions {
@@ -27,6 +28,7 @@ interface ClaudeJsonOutput {
 interface ClaudeCliAdapterDeps {
   runner: ProcessRunner;
   binaryPath?: string;
+  logger?: StructuredLogger;
 }
 
 const AUTH_PATTERNS = ["authentication", "login", "auth", "unauthorized"];
@@ -69,33 +71,54 @@ function buildArgv(request: ClaudeCliRequest, binaryPath: string): string[] {
 export function createClaudeCliAdapter(
   deps: ClaudeCliAdapterDeps
 ): ClaudeCliAdapter {
-  const { runner } = deps;
+  const { runner, logger } = deps;
   const binaryPath = deps.binaryPath ?? "claude";
 
   return {
     async execute(request: ClaudeCliRequest): Promise<ClaudeCliResult> {
       const argv = buildArgv(request, binaryPath);
       const options: ProcessRunOptions = { timeoutMs: request.timeoutMs };
+      const startMs = Date.now();
 
       let result: ProcessRunResult;
       try {
         result = await runner.run(argv, options);
       } catch (err: unknown) {
         const code = (err as NodeJS.ErrnoException).code;
-        if (code === "ENOENT") {
-          return { kind: "failure", category: "missing-cli" };
-        }
-        return { kind: "failure", category: "non-zero-exit" };
+        const category = code === "ENOENT" ? "missing-cli" : "non-zero-exit";
+        logger?.error({
+          event: "cli.execute.failure",
+          errorCategory: category,
+          durationMs: Date.now() - startMs
+        });
+        return { kind: "failure", category };
       }
 
       if (result.timedOut) {
+        logger?.error({
+          event: "cli.execute.failure",
+          errorCategory: "timeout",
+          durationMs: Date.now() - startMs
+        });
         return { kind: "failure", category: "timeout" };
       }
 
       if (result.exitCode !== 0) {
         if (isAuthFailure(result.stderr)) {
+          logger?.error({
+            event: "cli.execute.failure",
+            errorCategory: "auth-failure",
+            exitCode: result.exitCode,
+            durationMs: Date.now() - startMs
+          });
           return { kind: "failure", category: "auth-failure" };
         }
+        logger?.error({
+          event: "cli.execute.failure",
+          errorCategory: "non-zero-exit",
+          exitCode: result.exitCode,
+          durationMs: Date.now() - startMs
+        });
         return {
           kind: "failure",
           category: "non-zero-exit",
@@ -107,8 +130,19 @@ export function createClaudeCliAdapter(
       try {
         parsed = JSON.parse(result.stdout) as ClaudeJsonOutput;
       } catch {
+        logger?.error({
+          event: "cli.execute.failure",
+          errorCategory: "invalid-json",
+          durationMs: Date.now() - startMs
+        });
         return { kind: "failure", category: "invalid-json" };
       }
+
+      logger?.info({
+        event: "cli.execute.success",
+        exitCode: result.exitCode,
+        durationMs: Date.now() - startMs
+      });
 
       return {
         kind: "success",
