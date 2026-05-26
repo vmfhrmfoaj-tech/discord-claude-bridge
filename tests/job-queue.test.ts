@@ -53,9 +53,15 @@ class FakeClaudeCliAdapter implements ClaudeCliAdapter {
 }
 
 class FakeReplyPublisher implements ReplyPublisher {
+  reactionCalls: ReplyTarget[] = [];
   typingCalls: ReplyTarget[] = [];
   successCalls: Array<{ target: ReplyTarget; text: string }> = [];
   failureCalls: Array<{ target: ReplyTarget; category: string }> = [];
+
+  publishReaction(target: ReplyTarget): Promise<void> {
+    this.reactionCalls.push(target);
+    return Promise.resolve();
+  }
 
   publishTyping(target: ReplyTarget): Promise<void> {
     this.typingCalls.push(target);
@@ -335,6 +341,7 @@ describe("JobQueue", () => {
         }
       };
       const publisher: ReplyPublisher = {
+        publishReaction: () => Promise.resolve(),
         publishTyping: () => Promise.resolve(),
         publishSuccess: () => {
           events.push("publish:success");
@@ -639,7 +646,9 @@ describe("JobQueue", () => {
       const makeDeferred = () => {
         let resolve!: () => void;
         const promise = new Promise<ClaudeCliResult>((res) => {
-          resolve = () => res({ kind: "success", text: "ok", exitCode: 0 });
+          resolve = () => {
+            res({ kind: "success", text: "ok", exitCode: 0 });
+          };
         });
         return { promise, resolve };
       };

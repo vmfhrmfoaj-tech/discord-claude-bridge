@@ -105,6 +105,7 @@ export interface ReplyTarget {
 }
 
 export interface ReplyPublisher {
+  publishReaction(target: ReplyTarget): Promise<void>;
   publishTyping(target: ReplyTarget): Promise<void>;
   publishSuccess(target: ReplyTarget, text: string): Promise<void>;
   publishFailure(target: ReplyTarget, category: string): Promise<void>;
@@ -145,6 +146,7 @@ export interface RuntimeConfig {
     level: "debug" | "info" | "warn" | "error";
     format: "json";
   };
+  responseMode: "claude" | "echo";
 }
 
 export interface ConfigLoader {

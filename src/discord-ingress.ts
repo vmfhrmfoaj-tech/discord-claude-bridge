@@ -43,7 +43,8 @@ export interface DiscordIngressDeps {
   clientId: string;
   parser: MentionParser;
   queue: Pick<JobQueue, "enqueue">;
-  publisher: Pick<ReplyPublisher, "publishTyping" | "publishFailure">;
+  publisher: Pick<ReplyPublisher, "publishTyping" | "publishFailure"> &
+    Partial<Pick<ReplyPublisher, "publishReaction">>;
   logger?: Pick<StructuredLogger, "info" | "error">;
 }
 
@@ -90,6 +91,7 @@ export function createDiscordIngress(deps: DiscordIngressDeps): DiscordIngress {
     };
 
     if (enqueueResult.kind === "accepted") {
+      await deps.publisher.publishReaction?.(target);
       await deps.publisher.publishTyping(target);
       deps.logger?.info({
         event: "discordIngress.message.enqueued",

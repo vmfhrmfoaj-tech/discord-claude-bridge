@@ -96,6 +96,22 @@ class RecordingPublisher implements Pick<
   }
 }
 
+class RecordingReactionPublisher extends RecordingPublisher {
+  reactionTargets: ReplyTarget[] = [];
+  operations: string[] = [];
+
+  publishReaction(target: ReplyTarget): Promise<void> {
+    this.reactionTargets.push(target);
+    this.operations.push("reaction");
+    return Promise.resolve();
+  }
+
+  override publishTyping(target: ReplyTarget): Promise<void> {
+    this.operations.push("typing");
+    return super.publishTyping(target);
+  }
+}
+
 function discordMessage(
   overrides: Partial<FakeDiscordMessage> = {}
 ): FakeDiscordMessage {
@@ -181,6 +197,37 @@ describe("DiscordIngress", () => {
         threadId: undefined
       }
     ]);
+  });
+
+  it("publishes optional reaction feedback before typing", async () => {
+    const client = new FakeDiscordClient();
+    const parser = new RecordingParser();
+    const queue = new RecordingQueue();
+    const publisher = new RecordingReactionPublisher();
+
+    const ingress = createDiscordIngress({
+      client,
+      token: "token",
+      clientId: "bot-1",
+      parser,
+      queue,
+      publisher
+    });
+
+    await ingress.start();
+    client.emitMessage(discordMessage());
+    await flushAsyncHandlers();
+
+    const target = {
+      messageId: "msg-1",
+      channelId: "chan-1",
+      requestId: "req-1",
+      guildId: "guild-1",
+      threadId: undefined
+    };
+    expect(publisher.reactionTargets).toEqual([target]);
+    expect(publisher.typingTargets).toEqual([target]);
+    expect(publisher.operations).toEqual(["reaction", "typing"]);
   });
 
   it("returns control to Discord without waiting for enqueue completion", async () => {

@@ -229,6 +229,14 @@ export function createConfigLoader(deps: ConfigLoaderDeps = {}): ConfigLoader {
         throw new ConfigValidationError("logging.format must be json");
       }
 
+      const responseModeEnv = env["RESPONSE_MODE"] ?? "claude";
+      if (responseModeEnv !== "claude" && responseModeEnv !== "echo") {
+        throw new ConfigValidationError(
+          "RESPONSE_MODE must be 'claude' or 'echo'"
+        );
+      }
+      const responseMode = responseModeEnv;
+
       return {
         discord: {
           token,
@@ -261,7 +269,8 @@ export function createConfigLoader(deps: ConfigLoaderDeps = {}): ConfigLoader {
         logging: {
           level: logLevel,
           format: logFormat
-        }
+        },
+        responseMode
       };
     }
   };
