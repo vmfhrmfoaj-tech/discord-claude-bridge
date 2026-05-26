@@ -11,7 +11,7 @@ export interface FileSystem {
 
 export const realFileSystem: FileSystem = {
   readFile: (path) => readFile(path, "utf8"),
-  writeFile: (path, content) => writeFile(path, content, "utf8"),
+  writeFile: (path, content) => writeFile(path, content, "utf8")
 };
 
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ type SessionMap = Record<string, string>;
 export class JsonSessionStore implements SessionStore {
   constructor(
     private readonly storePath: string,
-    private readonly fs: FileSystem = realFileSystem,
+    private readonly fs: FileSystem = realFileSystem
   ) {}
 
   async getSessionId(scopeKey: string): Promise<string | undefined> {
@@ -67,7 +67,7 @@ export class JsonSessionStore implements SessionStore {
       console.warn(
         `[session-store] WARNING: ${this.storePath} contains invalid JSON. ` +
           "Recovering as empty store to prevent session misrouting. " +
-          "Previous session continuity is lost.",
+          "Previous session continuity is lost."
       );
       return {};
     }

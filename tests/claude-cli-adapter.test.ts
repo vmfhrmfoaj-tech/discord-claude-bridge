@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { createClaudeCliAdapter } from "../src/claude-cli-adapter.js";
-import type { ProcessRunOptions, ProcessRunResult, ProcessRunner } from "../src/claude-cli-adapter.js";
+import type {
+  ProcessRunOptions,
+  ProcessRunResult,
+  ProcessRunner
+} from "../src/claude-cli-adapter.js";
 import type { ClaudeCliRequest } from "../src/modules.js";
 
 class FakeProcessRunner implements ProcessRunner {
@@ -86,7 +90,10 @@ describe("ClaudeCliAdapter", () => {
       const runner = new FakeProcessRunner(makeSuccess("hi"));
       const adapter = createClaudeCliAdapter({ runner });
 
-      await adapter.execute({ ...BASE_REQUEST, model: "claude-3-5-sonnet-20241022" });
+      await adapter.execute({
+        ...BASE_REQUEST,
+        model: "claude-3-5-sonnet-20241022"
+      });
 
       expect(runner.lastArgv).toContain("--model");
       const idx = runner.lastArgv.indexOf("--model");
@@ -330,7 +337,9 @@ describe("ClaudeCliAdapter", () => {
     });
 
     it("extracts session_id from JSON output into result.sessionId", async () => {
-      const runner = new FakeProcessRunner(makeSuccess("Answer text", "sess_abc123"));
+      const runner = new FakeProcessRunner(
+        makeSuccess("Answer text", "sess_abc123")
+      );
       const adapter = createClaudeCliAdapter({ runner });
 
       const result = await adapter.execute(BASE_REQUEST);

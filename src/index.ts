@@ -1,5 +1,16 @@
 export { createRuntime } from "./runtime.js";
 export {
+  createLocalRuntime,
+  type LocalRuntimeOptions
+} from "./local-runtime.js";
+export {
+  createDiscordIngress,
+  type DiscordIngressClient,
+  type DiscordIngressDeps,
+  type DiscordMessageLike
+} from "./discord-ingress.js";
+export { createNodeProcessRunner } from "./process-runner.js";
+export {
   ConfigValidationError,
   createConfigLoader,
   type ConfigLoaderDeps

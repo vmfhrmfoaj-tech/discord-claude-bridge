@@ -13,7 +13,7 @@ class FakeFileSystem implements FileSystem {
     const content = this.files.get(path);
     if (content === undefined) {
       return Promise.reject(
-        Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT" }),
+        Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT" })
       );
     }
     return Promise.resolve(content);
@@ -22,7 +22,7 @@ class FakeFileSystem implements FileSystem {
   writeFile(path: string, content: string): Promise<void> {
     if (this.failPaths.has(path)) {
       return Promise.reject(
-        new Error(`EACCES: permission denied, open '${path}'`),
+        new Error(`EACCES: permission denied, open '${path}'`)
       );
     }
     this.files.set(path, content);

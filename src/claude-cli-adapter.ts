@@ -1,4 +1,8 @@
-import type { ClaudeCliAdapter, ClaudeCliRequest, ClaudeCliResult } from "./modules.js";
+import type {
+  ClaudeCliAdapter,
+  ClaudeCliRequest,
+  ClaudeCliResult
+} from "./modules.js";
 
 export interface ProcessRunOptions {
   timeoutMs: number;
@@ -22,6 +26,7 @@ interface ClaudeJsonOutput {
 
 interface ClaudeCliAdapterDeps {
   runner: ProcessRunner;
+  binaryPath?: string;
 }
 
 const AUTH_PATTERNS = ["authentication", "login", "auth", "unauthorized"];
@@ -31,8 +36,16 @@ function isAuthFailure(stderr: string): boolean {
   return AUTH_PATTERNS.some((p) => lower.includes(p));
 }
 
-function buildArgv(request: ClaudeCliRequest): string[] {
-  const argv: string[] = ["claude", "-p", request.prompt, "--output-format", "json", "--tools", ""];
+function buildArgv(request: ClaudeCliRequest, binaryPath: string): string[] {
+  const argv: string[] = [
+    binaryPath,
+    "-p",
+    request.prompt,
+    "--output-format",
+    "json",
+    "--tools",
+    ""
+  ];
 
   if (request.model !== undefined) {
     argv.push("--model", request.model);
@@ -53,12 +66,15 @@ function buildArgv(request: ClaudeCliRequest): string[] {
   return argv;
 }
 
-export function createClaudeCliAdapter(deps: ClaudeCliAdapterDeps): ClaudeCliAdapter {
+export function createClaudeCliAdapter(
+  deps: ClaudeCliAdapterDeps
+): ClaudeCliAdapter {
   const { runner } = deps;
+  const binaryPath = deps.binaryPath ?? "claude";
 
   return {
     async execute(request: ClaudeCliRequest): Promise<ClaudeCliResult> {
-      const argv = buildArgv(request);
+      const argv = buildArgv(request, binaryPath);
       const options: ProcessRunOptions = { timeoutMs: request.timeoutMs };
 
       let result: ProcessRunResult;
@@ -80,7 +96,11 @@ export function createClaudeCliAdapter(deps: ClaudeCliAdapterDeps): ClaudeCliAda
         if (isAuthFailure(result.stderr)) {
           return { kind: "failure", category: "auth-failure" };
         }
-        return { kind: "failure", category: "non-zero-exit", exitCode: result.exitCode };
+        return {
+          kind: "failure",
+          category: "non-zero-exit",
+          exitCode: result.exitCode
+        };
       }
 
       let parsed: ClaudeJsonOutput;
