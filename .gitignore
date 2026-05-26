@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime config
+config.yaml
+config.local.yaml
+
+# Runtime state
+.data/
+
+# Dependencies and build output for the future app phase
+node_modules/
+dist/
+coverage/
+
+# Logs
+*.log

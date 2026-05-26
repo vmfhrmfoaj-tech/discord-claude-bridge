@@ -1,0 +1,86 @@
+# discord-claude-bridge runtime config
+#
+# Secret은 여기에 두지 않는다. Discord token 같은 secret value는 .env에 둔다.
+# 이 파일은 config.yaml로 복사한 뒤 deployment별로 수정한다.
+
+discord:
+  # 이 guild ID 목록 안에서만 응답한다.
+  # v1에서는 비워두지 않는 것을 기본 policy로 둔다.
+  allowedGuildIds:
+    - "000000000000000000"
+
+  # Optional channel allowlist.
+  # 빈 배열이면 allowed guild 안의 모든 channel을 허용한다.
+  allowedChannelIds: []
+
+  # v1 interaction model은 mention-only다.
+  # Slash commands와 DM support는 extension TODO다.
+  interactionMode: "mention-only"
+
+queue:
+  # Conservative default: 1.
+  # 값을 올리면 여러 Claude CLI child process가 동시에 실행되어 CPU, memory, cost가 증가할 수 있다.
+  concurrency: 1
+
+  # 새 request를 거절하기 전까지 memory에 대기시킬 최대 job 수.
+  # Redis queue는 restart-safe backlog를 위한 future Adapter다.
+  maxPendingJobs: 50
+
+claude:
+  # CLI binary name 또는 absolute path.
+  # host user는 Claude Code CLI에 이미 로그인되어 있어야 한다.
+  binaryPath: "claude"
+
+  # Optional model alias 또는 full model name.
+  # null이면 host Claude CLI default를 따른다.
+  # Examples: "sonnet", "opus", "claude-sonnet-4-6"
+  model: null
+
+  # v1은 Adapter parsing 안정성을 위해 structured JSON output을 사용한다.
+  # stream-json은 future streaming response support로 남긴다.
+  outputFormat: "json"
+
+  # Discord-triggered prompt에서 Claude Code tools를 비활성화한다.
+  # host filesystem과 shell을 prompt injection에서 보호하기 위한 default다.
+  tools: ""
+
+  # Conservative default: 120 seconds.
+  timeoutMs: 120000
+
+  # Optional per-request budget guard for print mode.
+  # null이면 --max-budget-usd를 전달하지 않는다.
+  maxBudgetUsd: null
+
+  # Discord user content와 분리해서 전달하는 fixed system prompt.
+  systemPrompt: |
+    You are a concise Korean helper inside an internal team Discord workspace.
+    Answer in Korean by default.
+    Keep development terms, code identifiers, logs, and error names in English when clearer.
+    Do not claim to have performed actions outside the information provided.
+
+prompt:
+  # 예상보다 큰 Discord content가 Claude CLI에 전달되지 않도록 제한한다.
+  maxCharacters: 12000
+
+session:
+  # Session key policy:
+  # - message가 thread 안에 있으면 Discord thread ID 사용
+  # - 아니면 Discord channel ID 사용
+  scope: "thread-or-channel"
+
+  # Local runtime state. 이 파일과 .data directory는 commit하지 않는다.
+  storePath: ".data/sessions.json"
+
+reply:
+  # Discord message content limit은 2000 characters다.
+  # split chunk 번호와 formatting 여유를 두기 위해 더 낮게 잡는다.
+  maxChunkCharacters: 1800
+
+  # queued job이 processing 중일 때 typing indicator를 보여준다.
+  typingIndicator: true
+
+logging:
+  # Structured console logs를 v1 observability baseline으로 둔다.
+  # Expected fields: requestId, guildId, channelId, threadId, jobStatus, durationMs, exitCode.
+  level: "info"
+  format: "json"
