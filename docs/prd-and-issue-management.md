@@ -351,3 +351,40 @@ PRD에 반드시 포함할 것:
 - End-to-end fake adapter mention-to-reply flow
 - README run/test docs and local smoke guidance
 ```
+
+
+
+
+``` tdd prompt example
+[$tdd] GitHub issue #<ISSUE_NUMBER>를 구현해줘.
+
+반드시 참고:
+- GitHub issue #<ISSUE_NUMBER>
+- Parent issue #1
+- docs/prd-v1-runtime-implementation.md
+- docs/context.md
+- docs/architecture.md
+- docs/adr/
+
+작업 방식:
+- issue scope 밖으로 나가지 마.
+- 먼저 관련 문서와 현재 codebase를 읽고, 구현할 public Interface와 테스트할 behavior 목록을 짧게 정리해줘.
+- 그 다음 TDD로 진행해줘: 한 번에 하나의 behavior test를 RED로 만들고, 최소 구현으로 GREEN을 만든 뒤 다음 behavior로 넘어가.
+- tests는 private implementation detail이 아니라 Module의 public Interface / observable behavior를 검증해야 해.
+- Discord, Claude CLI, filesystem 같은 external dependency는 fake 또는 test seam으로 대체해줘.
+- 모든 구현 후 refactor하고 test/lint/typecheck를 실행해줘.
+
+ADR 제약:
+- v1은 Bot App, not framework.
+- Local Node Process, not Docker-first.
+- Claude CLI Adapter, not Anthropic API Adapter.
+- in-memory Job Queue, not Redis.
+- JSON Session Store, not SQLite.
+- Discord-triggered Claude execution은 no-tools policy가 기본.
+- slash command, DM, Docker, Redis, SQLite, Anthropic API key integration은 구현하지 마.
+
+완료 조건:
+- issue acceptance criteria를 모두 만족해야 해.
+- issue-sized branch를 전제로 작업해. 예: `issue-<ISSUE_NUMBER>-<short-name>`.
+- 마지막에 변경 요약, 실행한 검증 명령, 남은 리스크를 알려줘.
+```
