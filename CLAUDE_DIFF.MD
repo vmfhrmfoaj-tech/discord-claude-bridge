@@ -37,7 +37,7 @@ v1 결정:
 
 ## Mode 2: Session Resume
 
-Claude session을 이어서 사용한다. CLI surface는 `--resume`, `--continue`, `--session-id` 계열 option을 사용한다.
+Claude session을 이어서 사용한다. CLI surface는 `--resume`, `--session-id` 계열 option을 사용한다.
 
 예시:
 
@@ -114,7 +114,8 @@ v1 결정:
 
 - config의 `claude.model`이 있을 때만 전달한다.
 - 비어 있으면 host Claude CLI default를 따른다.
-- alias, 예: `sonnet`, 또는 full model name을 허용한다.
+- full model name을 사용한다. 예: `claude-sonnet-4-6`.
+- TODO: `sonnet` 같은 short alias 지원 여부는 local CLI smoke test로 확인 필요.
 
 `--system-prompt <prompt>`
 

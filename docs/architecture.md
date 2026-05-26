@@ -61,7 +61,7 @@ flowchart TD
 
 - Input: Discord message event shape.
 - Output: ignored result or normalized mention request.
-- Invariants: bot authors ignored, mention required, prompt trimmed, max prompt size enforced later by config.
+- Invariants: bot 자신이 보낸 message 무시 (self-reply 방지), mention required, prompt trimmed, max prompt size 적용 담당 Module은 구현 phase에서 결정 (TODO).
 
 `Job Queue Interface`
 
@@ -106,7 +106,7 @@ flowchart TD
 - Claude timeout: publish concise failure reply and log `timeout`.
 - missing Claude CLI: fail fast at startup where possible; otherwise job failure includes setup guidance.
 - auth failure: publish operator-facing failure reply without leaking secrets.
-- invalid session mapping: remove broken mapping and retry only when implementation explicitly supports one safe retry.
+- invalid session mapping: remove broken mapping. retry 정책은 구현 phase에서 결정 (TODO).
 - Discord reply failure: log with requestId and do not retry indefinitely.
 
 ## Extension TODO

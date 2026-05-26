@@ -119,13 +119,13 @@ Execution mode 비교와 CLI parameter reference는 [CLAUDE_DIFF.MD](CLAUDE_DIFF
 
 ```txt
 src/
-  bot/
-  discord/
-  claude/
-  queue/
-  session/
-  config/
-  logging/
+  bot/        Claude CLI Worker
+  discord/    Discord Ingress, Mention Parser, Reply Publisher
+  claude/     Claude CLI Adapter
+  queue/      In-memory Job Queue
+  session/    Session Store
+  config/     config loader
+  logging/    structured logger
   index.ts
 ```
 

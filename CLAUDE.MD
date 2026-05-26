@@ -20,7 +20,7 @@
 ## Security Rules
 
 - Discord user prompt를 Claude Code tool execution 권한으로 연결하지 않는다.
-- v1 command policy는 no-tools다. 구현 시 `--tools ""` 또는 동등한 deny policy를 사용한다.
+- v1 command policy는 no-tools다. 구현 시 `--tools ""`를 사용한다.
 - `--dangerously-skip-permissions`는 Discord-triggered execution에서 금지한다.
 - `.env`와 local auth/session data를 commit하지 않는다.
 - `.data/sessions.json`은 runtime state이며 source of truth 문서가 아니다.
