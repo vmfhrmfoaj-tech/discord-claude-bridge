@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits } from "discord.js";
 
 import type { ProcessRunner } from "./claude-cli-adapter.js";
 import { createClaudeCliAdapter } from "./claude-cli-adapter.js";
+import { createEchoAdapter } from "./echo-adapter.js";
 import { createConfigLoader } from "./config-loader.js";
 import {
   createDiscordIngress,
@@ -41,6 +42,7 @@ interface DiscordChannelLike {
 }
 
 interface DiscordFetchedMessageLike {
+  react?: (emoji: string) => Promise<unknown>;
   reply(content: string): Promise<unknown>;
 }
 
@@ -51,6 +53,7 @@ export interface LocalRuntimeOptions {
   processRunner?: ProcessRunner;
   sessionStore?: SessionStore;
   log?: (event: StructuredLogEvent) => void;
+  echoDelayMs?: number;
 }
 
 export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
@@ -77,15 +80,20 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
         logger,
         maxChunkCharacters: config.reply.maxChunkCharacters
       });
+      const adapter =
+        config.responseMode === "echo"
+          ? createEchoAdapter({ delayMs: options.echoDelayMs })
+          : createClaudeCliAdapter({
+              runner: processRunner,
+              binaryPath: config.claude.binaryPath
+            });
       const queue = createJobQueue({
-        adapter: createClaudeCliAdapter({
-          runner: processRunner,
-          binaryPath: config.claude.binaryPath
-        }),
+        adapter,
         publisher,
         sessionStore:
           options.sessionStore ??
           new JsonSessionStore(config.session.storePath),
+        logger,
         config: {
           concurrency: config.queue.concurrency,
           maxPendingJobs: config.queue.maxPendingJobs,
@@ -108,9 +116,11 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
           maxCharacters: config.prompt.maxCharacters
         }),
         queue,
-        publisher: config.reply.typingIndicator
-          ? publisher
-          : withoutTyping(publisher),
+        publisher: createIngressPublisher({
+          publisher,
+          typingIndicator: config.reply.typingIndicator,
+          reactionIndicator: config.responseMode === "echo"
+        }),
         logger
       });
 
@@ -169,14 +179,30 @@ function createPublisher(options: {
   });
 }
 
-function withoutTyping(
-  publisher: ReplyPublisher
-): Pick<ReplyPublisher, "publishTyping" | "publishFailure"> {
-  return {
-    publishTyping: () => Promise.resolve(),
+function createIngressPublisher(options: {
+  publisher: ReplyPublisher;
+  typingIndicator: boolean;
+  reactionIndicator: boolean;
+}): Pick<ReplyPublisher, "publishTyping" | "publishFailure"> &
+  Partial<Pick<ReplyPublisher, "publishReaction">> {
+  const ingressPublisher: Pick<
+    ReplyPublisher,
+    "publishTyping" | "publishFailure"
+  > &
+    Partial<Pick<ReplyPublisher, "publishReaction">> = {
+    publishTyping: options.typingIndicator
+      ? (target) => options.publisher.publishTyping(target)
+      : () => Promise.resolve(),
     publishFailure: (target, category) =>
-      publisher.publishFailure(target, category)
+      options.publisher.publishFailure(target, category)
   };
+
+  if (options.reactionIndicator) {
+    ingressPublisher.publishReaction = (target) =>
+      options.publisher.publishReaction(target);
+  }
+
+  return ingressPublisher;
 }
 
 function createDiscordJsMessageTarget(
@@ -197,6 +223,22 @@ function createDiscordJsMessageTarget(
         throw new Error(`Discord channel cannot type: ${channelId}`);
       }
       await channel.sendTyping();
+    },
+
+    async reactToMessage(
+      messageId: string,
+      channelId: string,
+      emoji: string
+    ): Promise<void> {
+      const channel = await fetchChannel(channelId);
+      if (channel.messages == null) {
+        throw new Error(`Discord channel has no messages: ${channelId}`);
+      }
+      const message = await channel.messages.fetch(messageId);
+      if (message.react == null) {
+        throw new Error(`Discord message cannot react: ${messageId}`);
+      }
+      await message.react(emoji);
     },
 
     async replyToMessage(

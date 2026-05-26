@@ -30,6 +30,11 @@ const TARGET: ReplyTarget = { messageId: "msg-001", channelId: "chan-111" };
 
 class FakeDiscordMessageTarget implements DiscordMessageTarget {
   typingCalls: string[] = [];
+  reactionCalls: Array<{
+    messageId: string;
+    channelId: string;
+    emoji: string;
+  }> = [];
   replyCalls: Array<{ messageId: string; channelId: string; content: string }> =
     [];
   sendCalls: Array<{ channelId: string; content: string }> = [];
@@ -42,6 +47,15 @@ class FakeDiscordMessageTarget implements DiscordMessageTarget {
 
   sendTyping(channelId: string): Promise<void> {
     this.typingCalls.push(channelId);
+    return Promise.resolve();
+  }
+
+  reactToMessage(
+    messageId: string,
+    channelId: string,
+    emoji: string
+  ): Promise<void> {
+    this.reactionCalls.push({ messageId, channelId, emoji });
     return Promise.resolve();
   }
 
@@ -68,6 +82,23 @@ class FakeDiscordMessageTarget implements DiscordMessageTarget {
 }
 
 describe("ReplyPublisher", () => {
+  describe("reaction behavior", () => {
+    it("publishReaction reacts to the original message", async () => {
+      const discord = new FakeDiscordMessageTarget();
+      const publisher = createReplyPublisher({ discord });
+
+      await publisher.publishReaction(TARGET);
+
+      expect(discord.reactionCalls).toEqual([
+        {
+          messageId: TARGET.messageId,
+          channelId: TARGET.channelId,
+          emoji: "👀"
+        }
+      ]);
+    });
+  });
+
   describe("typing behavior", () => {
     it("publishTyping calls sendTyping with correct channelId", async () => {
       const discord = new FakeDiscordMessageTarget();

@@ -1,7 +1,16 @@
-import type { ReplyPublisher, ReplyTarget, StructuredLogger } from "./modules.js";
+import type {
+  ReplyPublisher,
+  ReplyTarget,
+  StructuredLogger
+} from "./modules.js";
 
 export interface DiscordMessageTarget {
   sendTyping(channelId: string): Promise<void>;
+  reactToMessage?(
+    messageId: string,
+    channelId: string,
+    emoji: string
+  ): Promise<void>;
   replyToMessage(
     messageId: string,
     channelId: string,
@@ -42,6 +51,7 @@ const FAILURE_MESSAGES: Record<string, string> = {
 
 const UNKNOWN_FAILURE_MESSAGE =
   "❌ 알 수 없는 오류가 발생했습니다. 다시 시도해주세요.";
+const DEFAULT_REACTION_EMOJI = "👀";
 
 function splitIntoChunks(text: string, maxChunkCharacters: number): string[] {
   if (text.length <= maxChunkCharacters) {
@@ -100,6 +110,24 @@ export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
   }
 
   return {
+    async publishReaction(target: ReplyTarget): Promise<void> {
+      if (discord.reactToMessage == null) {
+        return;
+      }
+
+      try {
+        await discord.reactToMessage(
+          target.messageId,
+          target.channelId,
+          DEFAULT_REACTION_EMOJI
+        );
+      } catch (err) {
+        const category = classifyDiscordError(err);
+        logger?.error({ event: "discord.error", errorCategory: category });
+        onDiscordError(category);
+      }
+    },
+
     async publishTyping(target: ReplyTarget): Promise<void> {
       await discord.sendTyping(target.channelId);
     },

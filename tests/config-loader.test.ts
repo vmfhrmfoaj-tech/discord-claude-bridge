@@ -416,4 +416,35 @@ logging:
 
     expect(cfg.discord.clientId).toBe("test-client-id");
   });
+
+  it("sets responseMode to 'echo' when RESPONSE_MODE=echo", async () => {
+    const loader = createConfigLoader({
+      env: { ...VALID_ENV, RESPONSE_MODE: "echo" },
+      readFile: EMPTY_READ
+    });
+
+    const cfg = await loader.load();
+
+    expect(cfg.responseMode).toBe("echo");
+  });
+
+  it("sets responseMode to 'claude' when RESPONSE_MODE is absent", async () => {
+    const loader = createConfigLoader({
+      env: VALID_ENV,
+      readFile: EMPTY_READ
+    });
+
+    const cfg = await loader.load();
+
+    expect(cfg.responseMode).toBe("claude");
+  });
+
+  it("rejects unknown RESPONSE_MODE value", async () => {
+    const loader = createConfigLoader({
+      env: { ...VALID_ENV, RESPONSE_MODE: "invalid-mode" },
+      readFile: EMPTY_READ
+    });
+
+    await expect(loader.load()).rejects.toThrow(ConfigValidationError);
+  });
 });

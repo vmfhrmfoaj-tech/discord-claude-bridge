@@ -3,14 +3,27 @@ import { describe, expect, it } from "vitest";
 import { ConfigValidationError } from "../src/config-loader.js";
 import { createLocalRuntime } from "../src/local-runtime.js";
 import type { ProcessRunner } from "../src/claude-cli-adapter.js";
-import type { ConfigLoader, RuntimeConfig } from "../src/modules.js";
+import type {
+  ConfigLoader,
+  RuntimeConfig,
+  StructuredLogEvent
+} from "../src/modules.js";
 import type { DiscordMessageTarget } from "../src/reply-publisher.js";
+import type {
+  DiscordIngressClient,
+  DiscordMessageLike
+} from "../src/discord-ingress.js";
 
-class FakeDiscordClient {
+class FakeDiscordClient implements DiscordIngressClient {
   loginCalls: string[] = [];
   destroyed = false;
+  private handlers: Array<(message: DiscordMessageLike) => void> = [];
 
-  on() {
+  on(
+    _event: "messageCreate",
+    listener: (message: DiscordMessageLike) => void
+  ): this {
+    this.handlers.push(listener);
     return this;
   }
 
@@ -21,6 +34,12 @@ class FakeDiscordClient {
 
   destroy(): void {
     this.destroyed = true;
+  }
+
+  emit(message: DiscordMessageLike): void {
+    for (const handler of this.handlers) {
+      handler(message);
+    }
   }
 }
 
@@ -44,7 +63,8 @@ const VALID_CONFIG: RuntimeConfig = {
     storePath: ".data/sessions.json"
   },
   reply: { maxChunkCharacters: 1800, typingIndicator: true },
-  logging: { level: "info", format: "json" }
+  logging: { level: "info", format: "json" },
+  responseMode: "claude"
 };
 
 function configLoader(result: RuntimeConfig | Error): ConfigLoader {
@@ -104,5 +124,172 @@ describe("LocalRuntime", () => {
 
     await expect(runtime.start()).rejects.toThrow(ConfigValidationError);
     expect(client.loginCalls).toEqual([]);
+  });
+
+  describe("echo mode (RESPONSE_MODE=echo)", () => {
+    const ECHO_CONFIG: RuntimeConfig = {
+      ...VALID_CONFIG,
+      responseMode: "echo"
+    };
+
+    it("does not call processRunner when a mention is received", async () => {
+      let runnerCallCount = 0;
+      const echoProcessRunner: ProcessRunner = {
+        run() {
+          runnerCallCount++;
+          return Promise.resolve({
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+            timedOut: false
+          });
+        }
+      };
+
+      const replies: string[] = [];
+      const echoTarget: DiscordMessageTarget = {
+        sendTyping: () => Promise.resolve(),
+        reactToMessage: () => Promise.resolve(),
+        replyToMessage: (_msgId, _chanId, text) => {
+          replies.push(text);
+          return Promise.resolve();
+        },
+        sendMessage: (_chanId, text) => {
+          replies.push(text);
+          return Promise.resolve();
+        }
+      };
+
+      const client = new FakeDiscordClient();
+      const runtime = createLocalRuntime({
+        configLoader: configLoader(ECHO_CONFIG),
+        client,
+        processRunner: echoProcessRunner,
+        discordTarget: echoTarget,
+        echoDelayMs: 0
+      });
+
+      await runtime.start();
+
+      const mention: DiscordMessageLike = {
+        id: "msg-1",
+        content: `<@bot-1> hello echo`,
+        author: { id: "user-42", bot: false },
+        channelId: "chan-1",
+        guildId: "guild-1",
+        mentions: { users: { has: (id) => id === "bot-1" } }
+      };
+
+      client.emit(mention);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await runtime.stop();
+
+      expect(runnerCallCount).toBe(0);
+    });
+
+    it("replies with [에코] prefix when a mention is received", async () => {
+      const replies: string[] = [];
+      const reactions: Array<{
+        messageId: string;
+        channelId: string;
+        emoji: string;
+      }> = [];
+      const typingCalls: string[] = [];
+      const echoTarget: DiscordMessageTarget = {
+        sendTyping: (channelId) => {
+          typingCalls.push(channelId);
+          return Promise.resolve();
+        },
+        reactToMessage: (messageId, channelId, emoji) => {
+          reactions.push({ messageId, channelId, emoji });
+          return Promise.resolve();
+        },
+        replyToMessage: (_msgId, _chanId, text) => {
+          replies.push(text);
+          return Promise.resolve();
+        },
+        sendMessage: (_chanId, text) => {
+          replies.push(text);
+          return Promise.resolve();
+        }
+      };
+
+      const client = new FakeDiscordClient();
+      const logs: StructuredLogEvent[] = [];
+      const runtime = createLocalRuntime({
+        configLoader: configLoader(ECHO_CONFIG),
+        client,
+        processRunner,
+        discordTarget: echoTarget,
+        log: (event) => logs.push(event),
+        echoDelayMs: 0
+      });
+
+      await runtime.start();
+
+      const mention: DiscordMessageLike = {
+        id: "msg-1",
+        content: `<@bot-1> hello echo`,
+        author: { id: "user-42", bot: false },
+        channelId: "chan-1",
+        guildId: "guild-1",
+        mentions: { users: { has: (id) => id === "bot-1" } }
+      };
+
+      client.emit(mention);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await runtime.stop();
+
+      expect(replies).toHaveLength(1);
+      expect(replies[0]).toContain("[에코]");
+      expect(replies[0]).toContain("hello echo");
+      expect(reactions).toEqual([
+        { messageId: "msg-1", channelId: "chan-1", emoji: "👀" }
+      ]);
+      expect(typingCalls).toEqual(["chan-1"]);
+      expect(logs.some((event) => event.event === "job.completed")).toBe(true);
+    });
+
+    it("does not react in claude mode", async () => {
+      const reactions: Array<{
+        messageId: string;
+        channelId: string;
+        emoji: string;
+      }> = [];
+      const echoTarget: DiscordMessageTarget = {
+        sendTyping: () => Promise.resolve(),
+        reactToMessage: (messageId, channelId, emoji) => {
+          reactions.push({ messageId, channelId, emoji });
+          return Promise.resolve();
+        },
+        replyToMessage: () => Promise.resolve(),
+        sendMessage: () => Promise.resolve()
+      };
+
+      const client = new FakeDiscordClient();
+      const runtime = createLocalRuntime({
+        configLoader: configLoader(VALID_CONFIG),
+        client,
+        processRunner,
+        discordTarget: echoTarget
+      });
+
+      await runtime.start();
+      client.emit({
+        id: "msg-1",
+        content: `<@bot-1> hello claude`,
+        author: { id: "user-42", bot: false },
+        channelId: "chan-1",
+        guildId: "guild-1",
+        mentions: { users: { has: (id) => id === "bot-1" } }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await runtime.stop();
+
+      expect(reactions).toEqual([]);
+    });
   });
 });
