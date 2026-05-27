@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh issue *)",
+      "Bash(gh api *)",
+      "Bash(gh pr *)",
+      "Bash(gh repo *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}
