@@ -96,7 +96,8 @@ function createLogCapture(): LogCapture {
     logger: {
       info: (ev) => events.push(ev),
       warn: (ev) => events.push(ev),
-      error: (ev) => events.push(ev)
+      error: (ev) => events.push(ev),
+      close: () => Promise.resolve()
     }
   };
 }

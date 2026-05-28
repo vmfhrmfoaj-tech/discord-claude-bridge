@@ -228,6 +228,10 @@ export function createConfigLoader(deps: ConfigLoaderDeps = {}): ConfigLoader {
       if (logFormat !== DEFAULTS.logging.format) {
         throw new ConfigValidationError("logging.format must be json");
       }
+      const logFilePath = optionalString(
+        logging["filePath"],
+        "logging.filePath"
+      );
 
       const responseModeEnv = env["RESPONSE_MODE"] ?? "claude";
       if (responseModeEnv !== "claude" && responseModeEnv !== "echo") {
@@ -268,7 +272,8 @@ export function createConfigLoader(deps: ConfigLoaderDeps = {}): ConfigLoader {
         },
         logging: {
           level: logLevel,
-          format: logFormat
+          format: logFormat,
+          filePath: logFilePath
         },
         responseMode
       };

@@ -25,6 +25,9 @@ class FakeLogger implements StructuredLogger {
   error(ev: StructuredLogEvent): void {
     this.errors.push(ev);
   }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 class FakeProcessRunner implements ProcessRunner {

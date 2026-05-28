@@ -126,6 +126,44 @@ describe("LocalRuntime", () => {
     expect(client.loginCalls).toEqual([]);
   });
 
+  it("creates configured logger from loaded logging config and closes it on stop", async () => {
+    const client = new FakeDiscordClient();
+    const loggerCalls: string[] = [];
+    const config: RuntimeConfig = {
+      ...VALID_CONFIG,
+      logging: {
+        level: "info",
+        format: "json",
+        filePath: ".data/runtime.log"
+      }
+    };
+    const runtime = createLocalRuntime({
+      configLoader: configLoader(config),
+      client,
+      processRunner,
+      discordTarget,
+      loggerFactory(loggingConfig) {
+        loggerCalls.push(`filePath:${loggingConfig.filePath ?? ""}`);
+        return {
+          info: (event) => loggerCalls.push(`info:${event.event}`),
+          warn: (event) => loggerCalls.push(`warn:${event.event}`),
+          error: (event) => loggerCalls.push(`error:${event.event}`),
+          close: () => {
+            loggerCalls.push("close");
+            return Promise.resolve();
+          }
+        };
+      }
+    });
+
+    await runtime.start();
+    await runtime.stop();
+
+    expect(loggerCalls).toContain("filePath:.data/runtime.log");
+    expect(loggerCalls).toContain("info:runtime.started");
+    expect(loggerCalls).toContain("close");
+  });
+
   describe("echo mode (RESPONSE_MODE=echo)", () => {
     const ECHO_CONFIG: RuntimeConfig = {
       ...VALID_CONFIG,

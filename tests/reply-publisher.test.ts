@@ -24,6 +24,9 @@ class FakeLogger implements StructuredLogger {
   error(ev: StructuredLogEvent): void {
     this.errors.push(ev);
   }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 const TARGET: ReplyTarget = { messageId: "msg-001", channelId: "chan-111" };
@@ -333,13 +336,13 @@ describe("ReplyPublisher", () => {
       expect(loggedErrors).toContain("rate-limit");
     });
 
-    it("default onDiscordError uses console.error and does not throw", async () => {
+    it("default onDiscordError writes to process.stderr and does not throw", async () => {
       const discord = new FakeDiscordMessageTarget();
       discord.setReplyError({ kind: "deleted-message" });
 
-      const consoleSpy = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => undefined);
+      const stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
 
       const publisher = createReplyPublisher({ discord });
 
@@ -347,7 +350,28 @@ describe("ReplyPublisher", () => {
         publisher.publishSuccess(TARGET, "hello")
       ).resolves.toBeUndefined();
 
-      consoleSpy.mockRestore();
+      stderrSpy.mockRestore();
+    });
+
+    it("default onDiscordError avoids raw stderr when structured logger is present", async () => {
+      const discord = new FakeDiscordMessageTarget();
+      discord.setReplyError({ kind: "deleted-message" });
+      const logger = new FakeLogger();
+      const stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
+      const publisher = createReplyPublisher({ discord, logger });
+
+      await expect(
+        publisher.publishSuccess(TARGET, "hello")
+      ).resolves.toBeUndefined();
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+      expect(
+        logger.errors.some((event) => event.event === "discord.error")
+      ).toBe(true);
+      stderrSpy.mockRestore();
     });
   });
 

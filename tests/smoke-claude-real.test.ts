@@ -17,6 +17,9 @@ class MemoryLogger implements StructuredLogger {
   error(ev: StructuredLogEvent): void {
     this.events.push(ev);
   }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 const maybeIt = process.env["RUN_CLAUDE_SMOKE"] === "1" ? it : it.skip;

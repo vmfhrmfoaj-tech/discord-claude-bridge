@@ -147,7 +147,7 @@ export async function main(): Promise<void> {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((error: unknown) => {
-    console.error(error);
+    process.stderr.write(String(error) + "\n");
     process.exitCode = 1;
   });
 }

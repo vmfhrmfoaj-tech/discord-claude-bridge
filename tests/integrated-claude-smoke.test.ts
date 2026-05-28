@@ -71,7 +71,8 @@ function createLogCapture(): LogCapture {
     logger: {
       info: (ev) => events.push(ev),
       warn: (ev) => events.push(ev),
-      error: (ev) => events.push(ev)
+      error: (ev) => events.push(ev),
+      close: () => Promise.resolve()
     }
   };
 }
@@ -98,7 +99,9 @@ interface IntegratedSystem {
   logCapture: LogCapture;
 }
 
-function buildIntegratedSystem(opts: { binaryPath?: string } = {}): IntegratedSystem {
+function buildIntegratedSystem(
+  opts: { binaryPath?: string } = {}
+): IntegratedSystem {
   const replyCapture = createReplyCapture();
   const logCapture = createLogCapture();
   const sessionStore = createInMemorySessionStore();
@@ -158,7 +161,9 @@ describe("integrated smoke: real Claude CLI through full pipeline", () => {
 
       expect(sys.replyCapture.replies.length).toBeGreaterThanOrEqual(1);
       expect(typeof sys.replyCapture.replies[0]?.text).toBe("string");
-      expect((sys.replyCapture.replies[0]?.text ?? "").length).toBeGreaterThan(0);
+      expect((sys.replyCapture.replies[0]?.text ?? "").length).toBeGreaterThan(
+        0
+      );
     },
     120_000
   );
