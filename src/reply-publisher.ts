@@ -86,14 +86,24 @@ function classifyDiscordError(err: unknown): string {
   return "unknown";
 }
 
-function defaultOnDiscordError(category: string): void {
-  console.error(`[reply-publisher] Discord error: ${category}`);
+function defaultOnDiscordError(
+  category: string,
+  logger?: StructuredLogger
+): void {
+  if (logger !== undefined) {
+    return;
+  }
+  process.stderr.write(`[reply-publisher] Discord error: ${category}\n`);
 }
 
 export function createReplyPublisher(deps: ReplyPublisherDeps): ReplyPublisher {
   const { discord, logger } = deps;
   const config = deps.config ?? DEFAULT_CONFIG;
-  const onDiscordError = deps.onDiscordError ?? defaultOnDiscordError;
+  const onDiscordError =
+    deps.onDiscordError ??
+    ((category: string) => {
+      defaultOnDiscordError(category, logger);
+    });
 
   async function safeReply(
     messageId: string,

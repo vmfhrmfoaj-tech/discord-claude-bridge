@@ -25,6 +25,10 @@ describe("runtime scaffold", () => {
         },
         error: (event) => {
           calls.push(`error:${event.event}`);
+        },
+        close: () => {
+          calls.push("logger.close");
+          return Promise.resolve();
         }
       }
     };

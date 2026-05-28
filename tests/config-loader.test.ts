@@ -86,6 +86,7 @@ reply:
 logging:
   level: "debug"
   format: "json"
+  filePath: ".data/app.log"
 `)
     });
 
@@ -112,7 +113,11 @@ logging:
       maxChunkCharacters: 1500,
       typingIndicator: false
     });
-    expect(cfg.logging).toEqual({ level: "debug", format: "json" });
+    expect(cfg.logging).toEqual({
+      level: "debug",
+      format: "json",
+      filePath: ".data/app.log"
+    });
   });
 
   it("rejects missing DISCORD_TOKEN as a startup validation error", async () => {

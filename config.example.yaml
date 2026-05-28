@@ -84,3 +84,5 @@ logging:
   # Expected fields: requestId, guildId, channelId, threadId, jobStatus, durationMs, exitCode.
   level: "info"
   format: "json"
+  # 로그 파일 경로. 설정하면 stderr + file 동시 출력. 미설정 시 stderr-only.
+  # filePath: ".data/app.log"

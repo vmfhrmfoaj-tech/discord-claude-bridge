@@ -145,6 +145,7 @@ export interface RuntimeConfig {
   logging: {
     level: "debug" | "info" | "warn" | "error";
     format: "json";
+    filePath?: string;
   };
   responseMode: "claude" | "echo";
 }
@@ -169,4 +170,5 @@ export interface StructuredLogger {
   info(event: StructuredLogEvent): void;
   warn(event: StructuredLogEvent): void;
   error(event: StructuredLogEvent): void;
+  close(): Promise<void>;
 }

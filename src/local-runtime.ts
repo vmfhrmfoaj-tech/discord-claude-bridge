@@ -15,6 +15,7 @@ import type {
   DiscordIngress,
   JobQueue,
   ReplyPublisher,
+  RuntimeConfig,
   SessionStore,
   StructuredLogEvent,
   StructuredLogger
@@ -53,14 +54,15 @@ export interface LocalRuntimeOptions {
   processRunner?: ProcessRunner;
   sessionStore?: SessionStore;
   log?: (event: StructuredLogEvent) => void;
+  loggerFactory?: (config: RuntimeConfig["logging"]) => StructuredLogger;
   echoDelayMs?: number;
 }
 
 export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
-  const logger = createLogger(options);
   const configLoader = options.configLoader ?? createConfigLoader();
   const client = options.client ?? createDefaultDiscordClient();
   const processRunner = options.processRunner ?? createNodeProcessRunner();
+  let logger: StructuredLogger | undefined;
 
   let started:
     | {
@@ -71,8 +73,9 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
 
   return {
     async start(): Promise<void> {
-      logger.info({ event: "runtime.starting" });
       const config = await configLoader.load();
+      logger = createLogger(options, config.logging);
+      logger.info({ event: "runtime.starting" });
 
       const publisher = createPublisher({
         client,
@@ -124,11 +127,17 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
         logger
       });
 
-      await queue.start();
+      let queueStarted = false;
       try {
+        await queue.start();
+        queueStarted = true;
         await ingress.start();
       } catch (error) {
-        await queue.stop();
+        if (queueStarted) {
+          await queue.stop();
+        }
+        await logger.close();
+        logger = undefined;
         throw error;
       }
 
@@ -137,13 +146,18 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): Runtime {
     },
 
     async stop(): Promise<void> {
-      logger.info({ event: "runtime.stopping" });
+      const activeLogger = logger ?? createLogger(options);
+      activeLogger.info({ event: "runtime.stopping" });
       if (started != null) {
         await started.ingress.stop();
         await started.queue.stop();
         started = undefined;
       }
-      logger.info({ event: "runtime.stopped" });
+      activeLogger.info({ event: "runtime.stopped" });
+      await activeLogger.close();
+      if (logger === activeLogger) {
+        logger = undefined;
+      }
     }
   };
 }
@@ -271,7 +285,14 @@ function asChannelClient(client: DiscordIngressClient): DiscordChannelClient {
   return client as DiscordChannelClient;
 }
 
-function createLogger(options: LocalRuntimeOptions): StructuredLogger {
+function createLogger(
+  options: LocalRuntimeOptions,
+  config?: RuntimeConfig["logging"]
+): StructuredLogger {
+  if (config !== undefined && options.loggerFactory !== undefined) {
+    return options.loggerFactory(config);
+  }
+
   return {
     info(event) {
       options.log?.(event);
@@ -281,6 +302,9 @@ function createLogger(options: LocalRuntimeOptions): StructuredLogger {
     },
     error(event) {
       options.log?.(event);
+    },
+    close() {
+      return Promise.resolve();
     }
   };
 }

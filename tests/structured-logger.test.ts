@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   createStructuredLogger,
@@ -11,39 +14,16 @@ import type { StructuredLogEvent } from "../src/modules.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function captureConsoleLogs(): { logs: string[]; restore: () => void } {
-  const logs: string[] = [];
-  const spy = vi.spyOn(console, "log").mockImplementation((msg: string) => {
-    logs.push(msg);
-  });
+function captureStderr(): { lines: string[]; restore: () => void } {
+  const lines: string[] = [];
+  const spy = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation((chunk: string | Uint8Array) => {
+      if (typeof chunk === "string") lines.push(chunk);
+      return true;
+    });
   return {
-    logs,
-    restore: () => {
-      spy.mockRestore();
-    }
-  };
-}
-
-function captureConsoleWarn(): { warns: string[]; restore: () => void } {
-  const warns: string[] = [];
-  const spy = vi.spyOn(console, "warn").mockImplementation((msg: string) => {
-    warns.push(msg);
-  });
-  return {
-    warns,
-    restore: () => {
-      spy.mockRestore();
-    }
-  };
-}
-
-function captureConsoleError(): { errors: string[]; restore: () => void } {
-  const errors: string[] = [];
-  const spy = vi.spyOn(console, "error").mockImplementation((msg: string) => {
-    errors.push(msg);
-  });
-  return {
-    errors,
+    lines,
     restore: () => {
       spy.mockRestore();
     }
@@ -51,120 +31,277 @@ function captureConsoleError(): { errors: string[]; restore: () => void } {
 }
 
 function parseLog(line: string): Record<string, unknown> {
-  return JSON.parse(line) as Record<string, unknown>;
+  return JSON.parse(line.trimEnd()) as Record<string, unknown>;
+}
+
+function parsedLines(lines: string[]): Array<Record<string, unknown>> {
+  return lines.filter((l) => l.trim()).map(parseLog);
 }
 
 // ---------------------------------------------------------------------------
-// Tests: createStructuredLogger
+// Tests: createStructuredLogger — stderr-only (no filePath)
 // ---------------------------------------------------------------------------
 
-describe("StructuredLogger", () => {
-  describe("info level", () => {
-    it("emits JSON line with event field via console.log", () => {
-      const { logs, restore } = captureConsoleLogs();
-      const logger = createStructuredLogger();
+describe("StructuredLogger — stderr-only (no filePath)", () => {
+  it("emits log_file_path_not_configured warn on stderr when created without config", () => {
+    const { lines, restore } = captureStderr();
+    createStructuredLogger();
+    restore();
 
-      logger.info({ event: "runtime.started" });
+    const parsed = parsedLines(lines);
+    const warn = parsed.find(
+      (p) => p["event"] === "log_file_path_not_configured"
+    );
+    expect(warn).toBeDefined();
+    expect(warn?.["level"]).toBe("warn");
+  });
 
-      restore();
-      expect(logs).toHaveLength(1);
-      const parsed = parseLog(logs[0] ?? "");
-      expect(parsed["event"]).toBe("runtime.started");
-      expect(parsed["level"]).toBe("info");
+  it("emits log_file_path_not_configured warn on stderr when filePath is absent in config", () => {
+    const { lines, restore } = captureStderr();
+    createStructuredLogger({ level: "info", format: "json" });
+    restore();
+
+    const parsed = parsedLines(lines);
+    const warn = parsed.find(
+      (p) => p["event"] === "log_file_path_not_configured"
+    );
+    expect(warn).toBeDefined();
+  });
+
+  it("info() writes JSON with level=info to stderr", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    logger.info({ event: "runtime.started" });
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "runtime.started");
+    expect(entry).toBeDefined();
+    expect(entry?.["level"]).toBe("info");
+  });
+
+  it("warn() writes JSON with level=warn to stderr", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    logger.warn({ event: "session.corrupt" });
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "session.corrupt");
+    expect(entry).toBeDefined();
+    expect(entry?.["level"]).toBe("warn");
+  });
+
+  it("error() writes JSON with level=error to stderr", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    logger.error({ event: "cli.execute.failure", errorCategory: "timeout" });
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "cli.execute.failure");
+    expect(entry).toBeDefined();
+    expect(entry?.["level"]).toBe("error");
+    expect(entry?.["errorCategory"]).toBe("timeout");
+  });
+
+  it("emits correlation fields when present", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    const ev: StructuredLogEvent = {
+      event: "job.started",
+      requestId: "req-abc",
+      guildId: "guild-123",
+      channelId: "chan-456",
+      threadId: "thread-789"
+    };
+    logger.info(ev);
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "job.started");
+    expect(entry?.["requestId"]).toBe("req-abc");
+    expect(entry?.["guildId"]).toBe("guild-123");
+    expect(entry?.["channelId"]).toBe("chan-456");
+    expect(entry?.["threadId"]).toBe("thread-789");
+  });
+
+  it("emits jobStatus, durationMs, exitCode when present", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    logger.info({
+      event: "job.completed",
+      jobStatus: "success",
+      durationMs: 1234,
+      exitCode: 0
     });
 
-    it("emits correlation fields when present", () => {
-      const { logs, restore } = captureConsoleLogs();
-      const logger = createStructuredLogger();
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "job.completed");
+    expect(entry?.["jobStatus"]).toBe("success");
+    expect(entry?.["durationMs"]).toBe(1234);
+    expect(entry?.["exitCode"]).toBe(0);
+  });
 
-      const ev: StructuredLogEvent = {
-        event: "job.started",
-        requestId: "req-abc",
-        guildId: "guild-123",
-        channelId: "chan-456",
-        threadId: "thread-789"
-      };
-      logger.info(ev);
+  it("includes a timestamp field", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
 
-      restore();
-      const parsed = parseLog(logs[0] ?? "");
-      expect(parsed["requestId"]).toBe("req-abc");
-      expect(parsed["guildId"]).toBe("guild-123");
-      expect(parsed["channelId"]).toBe("chan-456");
-      expect(parsed["threadId"]).toBe("thread-789");
+    logger.info({ event: "test.event" });
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "test.event");
+    expect(typeof entry?.["ts"]).toBe("string");
+  });
+
+  it("omits undefined fields from output", () => {
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+
+    logger.info({ event: "test.event", requestId: undefined });
+
+    restore();
+    const parsed = parsedLines(lines);
+    const entry = parsed.find((p) => p["event"] === "test.event");
+    expect(entry && "requestId" in entry).toBe(false);
+  });
+
+  it("close() resolves immediately in stderr-only mode", async () => {
+    const { restore } = captureStderr();
+    const logger = createStructuredLogger({ level: "info", format: "json" });
+    restore();
+
+    await expect(logger.close()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: createStructuredLogger — file mode (filePath provided)
+// ---------------------------------------------------------------------------
+
+describe("StructuredLogger — file mode (filePath provided)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "structured-logger-test-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("emits log_file_opened info on stderr when filePath is set", () => {
+    const filePath = path.join(tmpDir, "app.log");
+    const { lines, restore } = captureStderr();
+    createStructuredLogger({ level: "info", format: "json", filePath });
+    restore();
+
+    const parsed = parsedLines(lines);
+    const opened = parsed.find((p) => p["event"] === "log_file_opened");
+    expect(opened).toBeDefined();
+    expect(opened?.["level"]).toBe("info");
+  });
+
+  it("creates parent directories automatically if they do not exist", () => {
+    const filePath = path.join(tmpDir, "nested", "deep", "app.log");
+    const { restore } = captureStderr();
+    createStructuredLogger({ level: "info", format: "json", filePath });
+    restore();
+
+    expect(fs.existsSync(path.dirname(filePath))).toBe(true);
+  });
+
+  it("writes log entries to file AND stderr simultaneously", async () => {
+    const filePath = path.join(tmpDir, "app.log");
+    const { lines, restore } = captureStderr();
+    const logger = createStructuredLogger({
+      level: "info",
+      format: "json",
+      filePath
     });
 
-    it("emits jobStatus, durationMs, exitCode, errorCategory when present", () => {
-      const { logs, restore } = captureConsoleLogs();
-      const logger = createStructuredLogger();
+    logger.info({ event: "test.dual" });
+    await logger.close();
+    restore();
 
-      logger.info({
-        event: "job.completed",
-        jobStatus: "success",
-        durationMs: 1234,
-        exitCode: 0,
-        errorCategory: undefined
+    const stderrHasEntry = parsedLines(lines).some(
+      (p) => p["event"] === "test.dual"
+    );
+    expect(stderrHasEntry).toBe(true);
+
+    const fileContent = fs.readFileSync(filePath, "utf8");
+    const fileParsed = parsedLines(fileContent.split("\n"));
+    const fileHasEntry = fileParsed.some((p) => p["event"] === "test.dual");
+    expect(fileHasEntry).toBe(true);
+  });
+
+  it("close() flushes the file stream before resolving", async () => {
+    const filePath = path.join(tmpDir, "app.log");
+    const { restore } = captureStderr();
+    const logger = createStructuredLogger({
+      level: "info",
+      format: "json",
+      filePath
+    });
+
+    logger.info({ event: "before.close" });
+    await logger.close();
+    restore();
+
+    const content = fs.readFileSync(filePath, "utf8");
+    expect(content).toContain("before.close");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: stream error → stderr fallback
+// ---------------------------------------------------------------------------
+
+describe("StructuredLogger — stream error fallback", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "structured-logger-err-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("emits log_write_failed on stderr and continues logging to stderr after stream error", async () => {
+    const stderrLines: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        if (typeof chunk === "string") stderrLines.push(chunk);
+        return true;
       });
 
-      restore();
-      const parsed = parseLog(logs[0] ?? "");
-      expect(parsed["jobStatus"]).toBe("success");
-      expect(parsed["durationMs"]).toBe(1234);
-      expect(parsed["exitCode"]).toBe(0);
+    const logger = createStructuredLogger({
+      level: "info",
+      format: "json",
+      filePath: tmpDir
     });
 
-    it("includes a timestamp field", () => {
-      const { logs, restore } = captureConsoleLogs();
-      const logger = createStructuredLogger();
+    // Opening a directory as a file causes the write stream to emit an error.
+    await new Promise((r) => setTimeout(r, 100));
 
-      logger.info({ event: "test.event" });
+    logger.info({ event: "after.fallback" });
+    await logger.close();
+    spy.mockRestore();
 
-      restore();
-      const parsed = parseLog(logs[0] ?? "");
-      expect(typeof parsed["ts"]).toBe("string");
-    });
-
-    it("omits undefined fields from output", () => {
-      const { logs, restore } = captureConsoleLogs();
-      const logger = createStructuredLogger();
-
-      logger.info({ event: "test.event", requestId: undefined });
-
-      restore();
-      const parsed = parseLog(logs[0] ?? "");
-      expect("requestId" in parsed).toBe(false);
-    });
-  });
-
-  describe("warn level", () => {
-    it("emits JSON line with level=warn via console.warn", () => {
-      const { warns, restore } = captureConsoleWarn();
-      const logger = createStructuredLogger();
-
-      logger.warn({ event: "session.corrupt" });
-
-      restore();
-      expect(warns).toHaveLength(1);
-      const parsed = parseLog(warns[0] ?? "");
-      expect(parsed["event"]).toBe("session.corrupt");
-      expect(parsed["level"]).toBe("warn");
-    });
-  });
-
-  describe("error level", () => {
-    it("emits JSON line with level=error via console.error", () => {
-      const { errors, restore } = captureConsoleError();
-      const logger = createStructuredLogger();
-
-      logger.error({ event: "cli.execute.failure", errorCategory: "timeout" });
-
-      restore();
-      expect(errors).toHaveLength(1);
-      const parsed = parseLog(errors[0] ?? "");
-      expect(parsed["event"]).toBe("cli.execute.failure");
-      expect(parsed["level"]).toBe("error");
-      expect(parsed["errorCategory"]).toBe("timeout");
-    });
+    const parsed = parsedLines(stderrLines);
+    const writeFailed = parsed.find((p) => p["event"] === "log_write_failed");
+    const afterFallback = parsed.find((p) => p["event"] === "after.fallback");
+    expect(writeFailed).toBeDefined();
+    expect(afterFallback).toBeDefined();
   });
 });
 

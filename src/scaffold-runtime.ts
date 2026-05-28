@@ -38,6 +38,9 @@ function createScaffoldLogger(
     },
     error(event) {
       options.log?.(event);
+    },
+    close() {
+      return Promise.resolve();
     }
   };
 }
